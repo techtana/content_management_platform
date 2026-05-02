@@ -65,7 +65,11 @@ export const aiApi = {
   deleteProvider: (id) => api.delete(`/ai/providers/${id}`),
   models: (id) => api.get(`/ai/providers/${id}/models`),
   test: (id) => api.post(`/ai/providers/${id}/test`),
-  enhance: (content, policy, providerId) => api.post('/ai/enhance', { content, policy, providerId }),
+  enhance: (content, instruction, providerId) => api.post('/ai/enhance', { content, instruction, providerId }),
+  instructions: () => api.get('/ai/instructions'),
+  createInstruction: (body) => api.post('/ai/instructions', body),
+  updateInstruction: (id, body) => api.put(`/ai/instructions/${id}`, body),
+  deleteInstruction: (id) => api.delete(`/ai/instructions/${id}`),
 };
 
 export const notebookApi = {

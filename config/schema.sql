@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS ai_providers (
   created_at    TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS ai_instructions (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  instruction TEXT NOT NULL,
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id         TEXT PRIMARY KEY,
   site_id    TEXT NOT NULL,

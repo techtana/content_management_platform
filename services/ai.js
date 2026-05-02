@@ -35,6 +35,10 @@ async function listModels(provider) {
 async function enhance(content, policy, providerId) {
   const provider = await getProvider(providerId);
 
+  if (!provider.default_model) {
+    throw new Error(`No model selected for "${provider.display_name}". Open AI Settings and set a default model.`);
+  }
+
   const systemPrompt = policy
     ? `You are a writing assistant. Follow these instructions:\n${policy}`
     : 'You are a writing assistant. Improve the clarity, structure, and style of the content while preserving the author\'s voice.';
