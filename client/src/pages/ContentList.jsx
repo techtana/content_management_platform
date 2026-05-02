@@ -10,7 +10,7 @@ export default function ContentList() {
   const navigate = useNavigate();
   const [site, setSite] = useState(null);
   const [files, setFiles] = useState([]);
-  const [tab, setTab] = useState('published');
+  const [tab, setTab] = useState('draft');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -70,7 +70,7 @@ export default function ContentList() {
 
           <div className="flex items-center justify-between mb-4">
             <div className="tabs" style={{ marginBottom: 0, borderBottom: 'none' }}>
-              {['published', 'draft'].map(t => (
+              {['draft', 'published'].map(t => (
                 <button key={t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
                   {t.charAt(0).toUpperCase() + t.slice(1)}
                   {!loading && tab === t && (
