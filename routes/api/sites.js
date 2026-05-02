@@ -26,7 +26,7 @@ router.post(
     db.prepare(`
       INSERT INTO sites (id, repo_owner, repo_name, default_branch, ssg_type, sections_json)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, repo_owner, repo_name, default_branch || 'main', ssg_type || 'unknown', JSON.stringify(sections || []));
+    `).run(id, repo_owner, repo_name, default_branch || 'main', ssg_type || 'unknown', JSON.stringify(dedupeSections(sections || [])));
     res.status(201).json(parseSite(db.prepare('SELECT * FROM sites WHERE id = ?').get(id)));
   }
 );
@@ -51,7 +51,7 @@ router.put('/:id', (req, res) => {
     repo_name || site.repo_name,
     default_branch || site.default_branch,
     ssg_type || site.ssg_type,
-    JSON.stringify(sections || JSON.parse(site.sections_json)),
+    JSON.stringify(dedupeSections(sections || JSON.parse(site.sections_json))),
     req.params.id
   );
   res.json(parseSite(db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id)));
@@ -64,8 +64,14 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+function dedupeSections(sections) {
+  const seen = new Map();
+  for (const s of sections) seen.set(s.slug, s);
+  return [...seen.values()];
+}
+
 function parseSite(site) {
-  return { ...site, sections: JSON.parse(site.sections_json) };
+  return { ...site, sections: dedupeSections(JSON.parse(site.sections_json)) };
 }
 
 module.exports = router;

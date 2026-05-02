@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { sitesApi, contentApi, aiApi, reposApi } from '../api.js';
+import { sitesApi, contentApi, aiApi } from '../api.js';
 import FrontmatterForm from '../components/FrontmatterForm.jsx';
 import EnhanceDiff from '../components/EnhanceDiff.jsx';
 
@@ -22,11 +22,15 @@ export default function Editor() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Original state for revert
+  const original = useRef({ frontmatter: {}, body: '', slug: '', date: '' });
+
   // AI
   const [aiProviders, setAiProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState('');
-  const [policies, setPolicies] = useState([]);
-  const [selectedPolicy, setSelectedPolicy] = useState('');
+  const [instructions, setInstructions] = useState([]);
+  const [selectedInstruction, setSelectedInstruction] = useState('');
+  const [adHocInstruction, setAdHocInstruction] = useState('');
   const [enhancing, setEnhancing] = useState(false);
   const [diffResult, setDiffResult] = useState(null);
 
@@ -42,26 +46,41 @@ export default function Editor() {
       }
     });
     aiApi.providers().then(p => { setAiProviders(p); if (p.length) setSelectedProvider(p[0].id); });
+    aiApi.instructions().then(setInstructions).catch(() => {});
   }, [siteId, sectionSlug]);
-
-  useEffect(() => {
-    if (!site) return;
-    reposApi.enhancePolicies(site.repo_owner, site.repo_name).then(setPolicies).catch(() => {});
-  }, [site]);
 
   useEffect(() => {
     if (isNew || !encodedPath) return;
     const rawPath = atob(encodedPath.replace(/-/g, '+').replace(/_/g, '/'));
     setFilePath(rawPath);
     contentApi.get(siteId, sectionSlug, rawPath).then(data => {
-      setFrontmatter(data.frontmatter || {});
-      setBody(data.body || '');
-      setSha(data.sha);
-      setDate(data.date || new Date().toISOString().slice(0, 10));
+      const fm = data.frontmatter || {};
+      const bd = data.body || '';
+      const dt = data.date || new Date().toISOString().slice(0, 10);
       const m = rawPath.split('/').pop().match(/^\d{4}-\d{2}-\d{2}-(.+)\.\w+$/);
-      if (m) setSlug(m[1]);
+      const sl = m ? m[1] : '';
+
+      setFrontmatter(fm);
+      setBody(bd);
+      setSha(data.sha);
+      setDate(dt);
+      setSlug(sl);
+
+      // Snapshot for revert
+      original.current = { frontmatter: fm, body: bd, date: dt, slug: sl };
     }).catch(e => setError(e.message)).finally(() => setLoading(false));
   }, [isNew, encodedPath, siteId, sectionSlug]);
+
+  function handleRevert() {
+    if (!confirm('Revert all changes to the last saved version?')) return;
+    const o = original.current;
+    setFrontmatter(o.frontmatter);
+    setBody(o.body);
+    setDate(o.date);
+    setSlug(o.slug);
+    setDiffResult(null);
+    setSuccess('Reverted to saved version.');
+  }
 
   function buildFilename() {
     const s = slug || slugify(frontmatter.title || 'untitled');
@@ -80,10 +99,13 @@ export default function Editor() {
         if (asDraft) {
           const { sha: newSha } = await contentApi.update(siteId, sectionSlug, filePath, { frontmatter, body, sha });
           setSha(newSha);
+          // Update original snapshot so revert reflects the new saved state
+          original.current = { frontmatter, body, date, slug };
           setSuccess('Draft saved!');
         } else {
           const { sha: newSha } = await contentApi.publish(siteId, sectionSlug, filePath, { frontmatter, body, sha });
           setSha(newSha);
+          original.current = { frontmatter, body, date, slug };
           setSuccess('Published!');
           setTimeout(() => navigate(`/sites/${siteId}/sections/${sectionSlug}`), 1200);
         }
@@ -99,13 +121,17 @@ export default function Editor() {
     }
   }
 
+  function buildInstruction() {
+    const saved = instructions.find(i => i.id === selectedInstruction)?.instruction || '';
+    if (saved && adHocInstruction.trim()) return `${saved}\n\nAdditional instructions: ${adHocInstruction.trim()}`;
+    return adHocInstruction.trim() || saved || null;
+  }
+
   async function handleEnhance() {
     setEnhancing(true); setError('');
     try {
-      const policyContent = selectedPolicy
-        ? (await (await fetch(`https://raw.githubusercontent.com/${site.repo_owner}/${site.repo_name}/${site.default_branch}/${selectedPolicy}`)).text())
-        : null;
-      const result = await aiApi.enhance(body, policyContent, selectedProvider || undefined);
+      const instruction = buildInstruction();
+      const result = await aiApi.enhance(body, instruction, selectedProvider || undefined);
       setDiffResult({ original: body, enhanced: result.enhanced });
     } catch (e) {
       setError('AI enhance failed: ' + e.message);
@@ -118,6 +144,7 @@ export default function Editor() {
 
   const fields = section?.frontmatterFields || [];
   const hasAi = section?.aiEnabled && aiProviders.length > 0;
+  const isDirty = !isNew && (body !== original.current.body || JSON.stringify(frontmatter) !== JSON.stringify(original.current.frontmatter));
 
   return (
     <div className="app-layout">
@@ -138,8 +165,14 @@ export default function Editor() {
       </aside>
       <div className="main-content">
         <header className="topbar">
-          <span className="topbar-title">{isNew ? 'New Post' : 'Edit Post'}</span>
+          <span className="topbar-title">
+            {isNew ? 'New Post' : 'Edit Post'}
+            {isDirty && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>• unsaved</span>}
+          </span>
           <div className="topbar-actions">
+            {!isNew && isDirty && (
+              <button className="btn btn-secondary btn-sm" onClick={handleRevert} title="Revert to last saved version">↩ Revert</button>
+            )}
             <Link className="btn btn-secondary btn-sm" to={`/sites/${siteId}/sections/${sectionSlug}`}>Cancel</Link>
             <button className="btn btn-secondary" onClick={() => save(true)} disabled={saving}>Save Draft</button>
             <button className="btn btn-primary" onClick={() => save(false)} disabled={saving}>
@@ -181,21 +214,41 @@ export default function Editor() {
               {hasAi && (
                 <div className="card mb-4">
                   <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.875rem' }}>AI Enhancement</div>
+
                   <div className="form-group">
                     <label className="form-label">Provider</label>
                     <select className="form-select" value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)}>
                       {aiProviders.map(p => <option key={p.id} value={p.id}>{p.display_name}</option>)}
                     </select>
                   </div>
-                  {policies.length > 0 && (
-                    <div className="form-group">
-                      <label className="form-label">Policy</label>
-                      <select className="form-select" value={selectedPolicy} onChange={e => setSelectedPolicy(e.target.value)}>
-                        <option value="">Default</option>
-                        {policies.map(p => <option key={p.path} value={p.path}>{p.name}</option>)}
-                      </select>
-                    </div>
-                  )}
+
+                  <div className="form-group">
+                    <label className="form-label">Instruction</label>
+                    <select className="form-select" value={selectedInstruction} onChange={e => setSelectedInstruction(e.target.value)}>
+                      <option value="">— default (improve clarity) —</option>
+                      {instructions.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                    </select>
+                    {instructions.length === 0 && (
+                      <div className="form-help">
+                        <Link to="/ai-settings" style={{ color: 'var(--primary)' }}>Add custom instructions</Link> in AI Settings.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Ad-hoc instruction <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional override)</span></label>
+                    <textarea
+                      className="form-textarea"
+                      rows={3}
+                      value={adHocInstruction}
+                      onChange={e => setAdHocInstruction(e.target.value)}
+                      placeholder="Type a one-off instruction, e.g. 'Make the intro more punchy' …"
+                    />
+                    {selectedInstruction && adHocInstruction.trim() && (
+                      <div className="form-help">Both instructions will be combined and sent together.</div>
+                    )}
+                  </div>
+
                   <button className="btn btn-secondary" style={{ width: '100%' }} onClick={handleEnhance} disabled={enhancing || !body}>
                     {enhancing ? 'Enhancing…' : '✨ Enhance with AI'}
                   </button>

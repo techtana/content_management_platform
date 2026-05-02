@@ -5,6 +5,12 @@ const { getDb } = require('../../config/db');
 const { encrypt } = require('../../services/crypto');
 const { validateToken } = require('../../services/github');
 const { detectSsg, proposeSections } = require('../../services/ssgDetector');
+
+function dedupeSections(sections) {
+  const seen = new Map();
+  for (const s of sections) seen.set(s.slug, s);
+  return [...seen.values()];
+}
 const { v4: uuidv4 } = require('uuid');
 
 router.get('/status', (req, res) => {
@@ -72,7 +78,7 @@ router.post(
         site.repo_name,
         site.default_branch || 'main',
         site.ssg_type || 'unknown',
-        JSON.stringify(site.sections || [])
+        JSON.stringify(dedupeSections(site.sections || []))
       );
 
       res.json({ ok: true, siteId, username, avatar });

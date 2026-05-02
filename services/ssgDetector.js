@@ -67,7 +67,13 @@ async function proposeSections(owner, repo, branch, ssgType, token) {
     // dir may not exist
   }
 
-  return sections;
+  return dedupeSections(sections);
+}
+
+function dedupeSections(sections) {
+  const seen = new Map();
+  for (const s of sections) seen.set(s.slug, s);
+  return [...seen.values()];
 }
 
 function defaultFields(slug) {
