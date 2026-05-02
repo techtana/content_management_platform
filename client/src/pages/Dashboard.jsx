@@ -10,8 +10,7 @@ export default function Dashboard({ darkMode, onToggleDark }) {
 
   useEffect(() => {
     Promise.all([sitesApi.list(), meApi.get()]).then(([s, m]) => {
-      setSites(s);
-      setMe(m);
+      setSites(s); setMe(m);
       if (s.length > 0) setActiveSite(s[0]);
     });
   }, []);
@@ -25,27 +24,7 @@ export default function Dashboard({ darkMode, onToggleDark }) {
 
   return (
     <div className="app-layout">
-      <aside className="sidebar">
-        <div className="sidebar-logo">📄 Pages CMS</div>
-        <nav>
-          {activeSite && (
-            <>
-              <div className="sidebar-section">{activeSite.repo_owner}/{activeSite.repo_name}</div>
-              {sections.map(s => (
-                <Link
-                  key={s.slug}
-                  className="sidebar-link"
-                  to={`/sites/${activeSite.id}/sections/${s.slug}`}
-                >
-                  {s.name}
-                </Link>
-              ))}
-            </>
-          )}
-          <div className="sidebar-section">Settings</div>
-          <Link className="sidebar-link" to="/ai-settings">AI Providers</Link>
-        </nav>
-      </aside>
+      <Sidebar site={activeSite} activeSlug={null} />
       <div className="main-content">
         <header className="topbar">
           <span className="topbar-title">Dashboard</span>
@@ -53,37 +32,75 @@ export default function Dashboard({ darkMode, onToggleDark }) {
             <button className="toggle-btn" onClick={toggleDark} title="Toggle dark mode">
               {darkMode ? '☀️' : '🌙'}
             </button>
-            {me && <img className="avatar" src={me.avatar} alt={me.username} title={me.username} />}
+            {me?.avatar && <img className="avatar" src={me.avatar} alt={me.username} title={`@${me.username}`} />}
           </div>
         </header>
+
         <main className="page">
           {sites.length === 0 ? (
             <div className="card">
-              <p>No sites configured. Run the setup wizard to add a site.</p>
-              <button className="btn btn-primary" onClick={() => navigate('/setup')}>Open Setup</button>
+              <div className="empty-state">
+                <div className="empty-state-icon">⚙️</div>
+                <div className="empty-state-title">No site configured</div>
+                <div className="empty-state-desc">Run the setup wizard to connect a GitHub Pages repo.</div>
+                <button className="btn btn-primary" onClick={() => navigate('/setup')}>Open Setup Wizard</button>
+              </div>
             </div>
           ) : (
-            <div>
-              <h2 style={{ marginTop: 0 }}>Welcome back{me ? `, ${me.username}` : ''}!</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+            <>
+              <div className="page-header">
+                <div>
+                  <h1 className="page-title">Welcome back{me ? `, @${me.username}` : ''}!</h1>
+                  <div className="page-subtitle">{activeSite?.repo_owner}/{activeSite?.repo_name}</div>
+                </div>
+              </div>
+
+              <div className="section-grid">
                 {sections.map(s => (
-                  <Link
-                    key={s.slug}
-                    to={`/sites/${activeSite.id}/sections/${s.slug}`}
-                    style={{ textDecoration: 'none' }}
-                  >
-                    <div className="card" style={{ cursor: 'pointer' }}>
-                      <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{s.name}</div>
-                      <div className="text-muted">{s.publishedDir}</div>
-                      {s.aiEnabled && <span className="badge badge-green" style={{ marginTop: '0.5rem' }}>AI ✓</span>}
+                  <Link key={s.slug} className="section-card" to={`/sites/${activeSite.id}/sections/${s.slug}`}>
+                    <div className="section-card-name">{s.name}</div>
+                    <div className="section-card-dir">{s.publishedDir}</div>
+                    <div className="flex gap-2 mt-2">
+                      {s.aiEnabled && <span className="badge badge-purple">AI</span>}
+                      {s.fileType === 'ipynb' && <span className="badge badge-yellow">Jupyter</span>}
                     </div>
                   </Link>
                 ))}
               </div>
-            </div>
+            </>
           )}
         </main>
       </div>
     </div>
+  );
+}
+
+export function Sidebar({ site, activeSlug }) {
+  const sections = site?.sections || [];
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-logo">
+        <div className="sidebar-logo-icon">📄</div>
+        Pages CMS
+      </div>
+      <nav>
+        {site && (
+          <>
+            <div className="sidebar-section">{site.repo_owner}/{site.repo_name}</div>
+            {sections.map(s => (
+              <Link
+                key={s.slug}
+                className={`sidebar-link${s.slug === activeSlug ? ' active' : ''}`}
+                to={`/sites/${site.id}/sections/${s.slug}`}
+              >
+                {s.name}
+              </Link>
+            ))}
+          </>
+        )}
+        <div className="sidebar-section">Settings</div>
+        <Link className={`sidebar-link${activeSlug === '__ai' ? ' active' : ''}`} to="/ai-settings">AI Providers</Link>
+      </nav>
+    </aside>
   );
 }
