@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { sitesApi, contentApi, aiApi } from '../api.js';
+import { Sidebar } from './Dashboard.jsx';
 import FrontmatterForm from '../components/FrontmatterForm.jsx';
 import EnhanceDiff from '../components/EnhanceDiff.jsx';
 
@@ -22,7 +23,6 @@ export default function Editor() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Original state for revert
   const original = useRef({ frontmatter: {}, body: '', slug: '', date: '' });
 
   // AI
@@ -44,9 +44,16 @@ export default function Editor() {
         sec.frontmatterFields?.forEach(f => { if (f.default) defaults[f.key] = f.default; });
         setFrontmatter(prev => ({ ...defaults, ...prev }));
       }
+      // Load instructions and auto-select section default
+      aiApi.instructions().then(list => {
+        setInstructions(list);
+        const defaultId = sec?.defaultInstructionId;
+        if (defaultId && list.find(i => i.id === defaultId)) {
+          setSelectedInstruction(defaultId);
+        }
+      }).catch(() => {});
     });
     aiApi.providers().then(p => { setAiProviders(p); if (p.length) setSelectedProvider(p[0].id); });
-    aiApi.instructions().then(setInstructions).catch(() => {});
   }, [siteId, sectionSlug]);
 
   useEffect(() => {
@@ -59,14 +66,7 @@ export default function Editor() {
       const dt = data.date || new Date().toISOString().slice(0, 10);
       const m = rawPath.split('/').pop().match(/^\d{4}-\d{2}-\d{2}-(.+)\.\w+$/);
       const sl = m ? m[1] : '';
-
-      setFrontmatter(fm);
-      setBody(bd);
-      setSha(data.sha);
-      setDate(dt);
-      setSlug(sl);
-
-      // Snapshot for revert
+      setFrontmatter(fm); setBody(bd); setSha(data.sha); setDate(dt); setSlug(sl);
       original.current = { frontmatter: fm, body: bd, date: dt, slug: sl };
     }).catch(e => setError(e.message)).finally(() => setLoading(false));
   }, [isNew, encodedPath, siteId, sectionSlug]);
@@ -74,12 +74,9 @@ export default function Editor() {
   function handleRevert() {
     if (!confirm('Revert all changes to the last saved version?')) return;
     const o = original.current;
-    setFrontmatter(o.frontmatter);
-    setBody(o.body);
-    setDate(o.date);
-    setSlug(o.slug);
+    setFrontmatter(o.frontmatter); setBody(o.body); setDate(o.date); setSlug(o.slug);
     setDiffResult(null);
-    setSuccess('Reverted to saved version.');
+    setSuccess('Reverted to last saved version.');
   }
 
   function buildFilename() {
@@ -91,34 +88,22 @@ export default function Editor() {
     setError(''); setSuccess(''); setSaving(true);
     try {
       if (isNew) {
-        const filename = buildFilename();
-        await contentApi.create(siteId, sectionSlug, { frontmatter, body, filename, saveAsDraft: asDraft });
+        await contentApi.create(siteId, sectionSlug, { frontmatter, body, filename: buildFilename(), saveAsDraft: asDraft });
         setSuccess(asDraft ? 'Draft saved!' : 'Published!');
         setTimeout(() => navigate(`/sites/${siteId}/sections/${sectionSlug}`), 1200);
       } else {
         if (asDraft) {
           const { sha: newSha } = await contentApi.update(siteId, sectionSlug, filePath, { frontmatter, body, sha });
-          setSha(newSha);
-          // Update original snapshot so revert reflects the new saved state
-          original.current = { frontmatter, body, date, slug };
-          setSuccess('Draft saved!');
+          setSha(newSha); original.current = { frontmatter, body, date, slug }; setSuccess('Draft saved!');
         } else {
           const { sha: newSha } = await contentApi.publish(siteId, sectionSlug, filePath, { frontmatter, body, sha });
-          setSha(newSha);
-          original.current = { frontmatter, body, date, slug };
-          setSuccess('Published!');
+          setSha(newSha); original.current = { frontmatter, body, date, slug }; setSuccess('Published!');
           setTimeout(() => navigate(`/sites/${siteId}/sections/${sectionSlug}`), 1200);
         }
       }
     } catch (e) {
-      if (e.status === 409) {
-        setError('File changed remotely — please go back and reload the file.');
-      } else {
-        setError(e.message);
-      }
-    } finally {
-      setSaving(false);
-    }
+      setError(e.status === 409 ? 'File changed remotely — go back and reload.' : e.message);
+    } finally { setSaving(false); }
   }
 
   function buildInstruction() {
@@ -130,17 +115,13 @@ export default function Editor() {
   async function handleEnhance() {
     setEnhancing(true); setError('');
     try {
-      const instruction = buildInstruction();
-      const result = await aiApi.enhance(body, instruction, selectedProvider || undefined);
+      const result = await aiApi.enhance(body, buildInstruction(), selectedProvider || undefined);
       setDiffResult({ original: body, enhanced: result.enhanced });
-    } catch (e) {
-      setError('AI enhance failed: ' + e.message);
-    } finally {
-      setEnhancing(false);
-    }
+    } catch (e) { setError('AI enhance failed: ' + e.message); }
+    finally { setEnhancing(false); }
   }
 
-  if (loading) return <div className="loading">Loading…</div>;
+  if (loading) return <div className="loading">Loading post…</div>;
 
   const fields = section?.frontmatterFields || [];
   const hasAi = section?.aiEnabled && aiProviders.length > 0;
@@ -148,59 +129,49 @@ export default function Editor() {
 
   return (
     <div className="app-layout">
-      <aside className="sidebar">
-        <div className="sidebar-logo">📄 Pages CMS</div>
-        <nav>
-          {site && (
-            <>
-              <div className="sidebar-section">{site.repo_owner}/{site.repo_name}</div>
-              {site.sections.map(s => (
-                <Link key={s.slug} className={`sidebar-link${s.slug === sectionSlug ? ' active' : ''}`} to={`/sites/${siteId}/sections/${s.slug}`}>{s.name}</Link>
-              ))}
-            </>
-          )}
-          <div className="sidebar-section">Settings</div>
-          <Link className="sidebar-link" to="/ai-settings">AI Providers</Link>
-        </nav>
-      </aside>
+      <Sidebar site={site} activeSlug={sectionSlug} />
       <div className="main-content">
         <header className="topbar">
           <span className="topbar-title">
             {isNew ? 'New Post' : 'Edit Post'}
-            {isDirty && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>• unsaved</span>}
+            {isDirty && <span className="topbar-unsaved">• unsaved</span>}
           </span>
           <div className="topbar-actions">
             {!isNew && isDirty && (
-              <button className="btn btn-secondary btn-sm" onClick={handleRevert} title="Revert to last saved version">↩ Revert</button>
+              <button className="btn btn-ghost btn-sm" onClick={handleRevert} title="Revert to saved">↩ Revert</button>
             )}
-            <Link className="btn btn-secondary btn-sm" to={`/sites/${siteId}/sections/${sectionSlug}`}>Cancel</Link>
+            <Link className="btn btn-ghost btn-sm" to={`/sites/${siteId}/sections/${sectionSlug}`}>Cancel</Link>
             <button className="btn btn-secondary" onClick={() => save(true)} disabled={saving}>Save Draft</button>
             <button className="btn btn-primary" onClick={() => save(false)} disabled={saving}>
               {saving ? 'Publishing…' : 'Publish'}
             </button>
           </div>
         </header>
+
         <main className="page">
-          {error && <div className="error-msg" style={{ marginBottom: '1rem' }}>{error}</div>}
-          {success && <div className="success-msg" style={{ marginBottom: '1rem' }}>{success}</div>}
+          {error && <div className="alert alert-error">{error}</div>}
+          {success && <div className="alert alert-success">{success}</div>}
 
           <div className="editor-layout">
-            <div className="editor-left">
+            {/* Left — metadata + body */}
+            <div>
               <div className="card mb-4">
-                <div className="form-group">
-                  <label className="form-label">Date</label>
-                  <input className="form-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                <div className="form-grid-2">
+                  <div className="form-group">
+                    <label className="form-label">Date</label>
+                    <input className="form-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Slug</label>
+                    <input className="form-input" value={slug} onChange={e => setSlug(e.target.value)} placeholder="auto from title" />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Slug</label>
-                  <input className="form-input" value={slug} onChange={e => setSlug(e.target.value)} placeholder="auto-generated from title" />
-                  <div className="form-help">Filename: {buildFilename()}</div>
-                </div>
+                <div className="form-help mb-3">Filename: <span className="font-mono">{buildFilename()}</span></div>
                 <FrontmatterForm fields={fields} values={frontmatter} onChange={setFrontmatter} />
               </div>
 
               <div className="card">
-                <label className="form-label">Content (Markdown)</label>
+                <label className="form-label">Content <span className="form-label-opt">(Markdown)</span></label>
                 <textarea
                   className="form-textarea editor-body"
                   value={body}
@@ -210,10 +181,11 @@ export default function Editor() {
               </div>
             </div>
 
-            <div className="editor-right">
+            {/* Right — AI + info */}
+            <div className="flex-col gap-3">
               {hasAi && (
-                <div className="card mb-4">
-                  <div style={{ fontWeight: 600, marginBottom: '0.75rem', fontSize: '0.875rem' }}>AI Enhancement</div>
+                <div className="card">
+                  <div className="ai-panel-title">✨ AI Enhancement</div>
 
                   <div className="form-group">
                     <label className="form-label">Provider</label>
@@ -223,51 +195,58 @@ export default function Editor() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Instruction</label>
+                    <label className="form-label">
+                      Instruction
+                      {section?.defaultInstructionId === selectedInstruction && selectedInstruction && (
+                        <span className="badge badge-purple" style={{ marginLeft: '6px' }}>section default</span>
+                      )}
+                    </label>
                     <select className="form-select" value={selectedInstruction} onChange={e => setSelectedInstruction(e.target.value)}>
                       <option value="">— default (improve clarity) —</option>
                       {instructions.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                     </select>
                     {instructions.length === 0 && (
                       <div className="form-help">
-                        <Link to="/ai-settings" style={{ color: 'var(--primary)' }}>Add custom instructions</Link> in AI Settings.
+                        <Link to="/ai-settings">Add instructions</Link> in AI Settings.
                       </div>
                     )}
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Ad-hoc instruction <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional override)</span></label>
+                    <label className="form-label">
+                      Ad-hoc instruction <span className="form-label-opt">(optional)</span>
+                    </label>
                     <textarea
                       className="form-textarea"
                       rows={3}
                       value={adHocInstruction}
                       onChange={e => setAdHocInstruction(e.target.value)}
-                      placeholder="Type a one-off instruction, e.g. 'Make the intro more punchy' …"
+                      placeholder="e.g. Make the intro more punchy…"
                     />
                     {selectedInstruction && adHocInstruction.trim() && (
-                      <div className="form-help">Both instructions will be combined and sent together.</div>
+                      <div className="form-help">Combined with selected instruction above.</div>
                     )}
                   </div>
 
-                  <button className="btn btn-secondary" style={{ width: '100%' }} onClick={handleEnhance} disabled={enhancing || !body}>
-                    {enhancing ? 'Enhancing…' : '✨ Enhance with AI'}
+                  <button className="btn btn-secondary w-full" onClick={handleEnhance} disabled={enhancing || !body}>
+                    {enhancing ? 'Enhancing…' : '✨ Enhance'}
                   </button>
                 </div>
               )}
 
               <div className="card">
-                <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.875rem' }}>About this post</div>
-                <div className="text-muted">
+                <div className="card-title mb-2">About</div>
+                <div className="text-xs font-mono" style={{ color: 'var(--text-3)', wordBreak: 'break-all', lineHeight: 1.6 }}>
                   {isNew
-                    ? `New ${section?.fileType || 'md'} file in ${section?.publishedDir || 'published dir'}`
-                    : <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', wordBreak: 'break-all' }}>{filePath}</span>}
+                    ? `New file → ${section?.publishedDir || '…'}`
+                    : filePath}
                 </div>
               </div>
             </div>
           </div>
 
           {diffResult && (
-            <div className="card" style={{ marginTop: '1rem' }}>
+            <div className="card mt-4">
               <EnhanceDiff
                 original={diffResult.original}
                 enhanced={diffResult.enhanced}

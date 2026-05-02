@@ -57,6 +57,21 @@ router.put('/:id', (req, res) => {
   res.json(parseSite(db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id)));
 });
 
+// PATCH /api/sites/:id/sections/:slug/default-instruction
+router.patch('/:id/sections/:slug/default-instruction', (req, res) => {
+  const db = getDb();
+  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+  if (!site) return res.status(404).json({ error: 'Site not found' });
+
+  const sections = JSON.parse(site.sections_json).map(s =>
+    s.slug === req.params.slug
+      ? { ...s, defaultInstructionId: req.body.instructionId || null }
+      : s
+  );
+  db.prepare('UPDATE sites SET sections_json=? WHERE id=?').run(JSON.stringify(sections), req.params.id);
+  res.json({ ok: true });
+});
+
 router.delete('/:id', (req, res) => {
   const db = getDb();
   const changes = db.prepare('DELETE FROM sites WHERE id = ?').run(req.params.id).changes;

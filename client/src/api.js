@@ -41,6 +41,8 @@ export const sitesApi = {
   create: (body) => api.post('/sites', body),
   update: (id, body) => api.put(`/sites/${id}`, body),
   delete: (id) => api.delete(`/sites/${id}`),
+  setSectionInstruction: (siteId, slug, instructionId) =>
+    api.patch(`/sites/${siteId}/sections/${slug}/default-instruction`, { instructionId }),
 };
 
 export const contentApi = {
