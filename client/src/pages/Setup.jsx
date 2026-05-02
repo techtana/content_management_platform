@@ -71,6 +71,7 @@ export default function Setup({ onComplete }) {
 
   async function finish() {
     onComplete();
+    navigate('/dashboard');
   }
 
   function updateSection(i, field, value) {
