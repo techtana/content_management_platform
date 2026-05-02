@@ -2,41 +2,43 @@ const path = require('path');
 const express = require('express');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
-const exphds = require('express-handlebars');
-const connectDB = require('./db/db');
+const rateLimit = require('express-rate-limit');
+const { initDb } = require('./config/db');
 
-// load config
 dotenv.config({ path: './config/config.env' });
 
-// connect to database
-connectDB();
+initDb();
 
-// create express app
 const app = express();
 
-// adding middleware
-// NOTE: Middleware are functions that 
-// process incoming requests before they reach 
-// your route handlers.
 if (process.env.NODE_ENV === 'development') {
-  // Enables HTTP request logging using the 
-  // morgan middleware with the 'dev' format.
-  // 
   app.use(morgan('dev'));
 }
 
-// Handlebars Template Engine
-app.engine('.hbs', exphds.engine({ defaultLayout: 'main', extname: '.hbs' }));
-app.set('view engine', '.hbs');
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
-// static folder
-app.use(express.static(path.join(__dirname, 'public')));
+app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
 
-// define routes
-app.use('/', require('./routes/index'));
+// API routes
+app.use('/api/setup', require('./routes/api/setup'));
+app.use('/api/me', require('./routes/api/me'));
+app.use('/api/repos', require('./routes/api/repos'));
+app.use('/api/sites', require('./routes/api/sites'));
+app.use('/api/sites', require('./routes/api/content'));
+app.use('/api/ai', require('./routes/api/ai'));
+app.use('/api/notebook', require('./routes/api/notebook'));
 
-// start the server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+// Serve React SPA (Vite build output)
+const clientDist = path.join(__dirname, 'public');
+app.use(express.static(clientDist));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientDist, 'index.html'));
+});
+
+const PORT = process.env.CMS_PORT || process.env.PORT || 3000;
+const BIND = process.env.CMS_BIND || '127.0.0.1';
+
+app.listen(PORT, BIND, () => {
+  console.log(`CMS running at http://${BIND}:${PORT}`);
 });

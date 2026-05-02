@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm approve-builds *)",
+      "Bash(echo '{\"onlyBuiltDependencies\":[\"better-sqlite3\"]}')",
+      "Bash(pnpm install *)",
+      "Bash(pnpm rebuild *)",
+      "Bash(Remove-Item .npmrc -ErrorAction SilentlyContinue)",
+      "Bash(pnpm add *)"
+    ]
+  }
+}
