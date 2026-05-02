@@ -8,7 +8,8 @@
       "Bash(Remove-Item .npmrc -ErrorAction SilentlyContinue)",
       "Bash(pnpm add *)",
       "Bash(node -e \"require\\('./config/db'\\); require\\('./services/crypto'\\); require\\('./services/github'\\); require\\('./services/ssgDetector'\\); require\\('./services/frontmatterParser'\\); require\\('./services/ai'\\); require\\('./services/notebook'\\); console.log\\('All modules load OK'\\)\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(pnpm build *)"
     ]
   }
 }

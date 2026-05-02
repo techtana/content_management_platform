@@ -3,9 +3,15 @@
   "version": "1.0.0",
   "description": "Lightweight app to manage content in github pages",
   "main": "app.js",
+  "bin": {
+    "cms": "./bin/cms.js"
+  },
   "scripts": {
     "start": "cross-env NODE_ENV=production node app.js",
-    "dev": "cross-env NODE_ENV=development nodemon app.js"
+    "dev:server": "cross-env NODE_ENV=development nodemon app.js",
+    "dev:client": "vite",
+    "build": "vite build",
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\""
   },
   "keywords": [],
   "author": "Tech Tana",
@@ -30,6 +36,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
     "cross-env": "^10.0.0",
     "nodemon": "^3.1.10",
     "vite": "^8.0.10"

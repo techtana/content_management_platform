@@ -32,7 +32,7 @@ app.use('/api/notebook', require('./routes/api/notebook'));
 // Serve React SPA (Vite build output)
 const clientDist = path.join(__dirname, 'public');
 app.use(express.static(clientDist));
-app.get('*', (req, res) => {
+app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(clientDist, 'index.html'));
 });
 
