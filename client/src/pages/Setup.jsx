@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { setupApi, reposApi } from '../api.js';
 
 const STEPS = ['GitHub Token', 'Select Repo', 'Configure Sections', 'AI Provider'];
 
 export default function Setup({ onComplete }) {
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [token, setToken] = useState('');
   const [user, setUser] = useState(null);

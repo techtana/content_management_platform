@@ -15,13 +15,17 @@ function createOctokit(token) {
 
 async function getFile(owner, repo, filePath, ref, token) {
   const octokit = createOctokit(token);
-  const { data } = await octokit.repos.getContent({ owner, repo, path: filePath, ref });
+  const params = { owner, repo, path: filePath };
+  if (ref) params.ref = ref;
+  const { data } = await octokit.repos.getContent(params);
   return data;
 }
 
 async function listFiles(owner, repo, dirPath, ref, token) {
   const octokit = createOctokit(token);
-  const { data } = await octokit.repos.getContent({ owner, repo, path: dirPath, ref });
+  const params = { owner, repo, path: dirPath };
+  if (ref) params.ref = ref;
+  const { data } = await octokit.repos.getContent(params);
   return Array.isArray(data) ? data : [];
 }
 
