@@ -284,17 +284,18 @@ function buildIndexTemplate(siteType, ssg, owner, repo, branch) {
         });
     }
 
+    var GH = 'https://github.com/' + OWNER + '/' + REPO + '/blob/' + BRANCH;
+
     load('_posts', 'post-list', function (f) {
       var m = f.name.match(/^(\\d{4}-\\d{2}-\\d{2})-(.+)\\.md$/);
       var date = m ? new Date(m[1] + 'T12:00:00Z').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
       var title = m ? titleCase(m[2]) : f.name.replace('.md', '');
-      var href = m ? '/' + m[2] + '/' : '/_posts/' + f.name;
-      return '<li><a href="' + href + '">' + title + '</a>' + (date ? '<div class="post-date">' + date + '</div>' : '') + '</li>';
+      return '<li><a href="' + GH + '/_posts/' + f.name + '" target="_blank" rel="noopener">' + title + '</a>' + (date ? '<div class="post-date">' + date + '</div>' : '') + '</li>';
     });
 
     load('_pages', 'page-list', function (f) {
       var slug = f.name.replace('.md', '');
-      return '<li><a href="/' + slug + '/">' + titleCase(slug) + '</a></li>';
+      return '<li><a href="' + GH + '/_pages/' + f.name + '" target="_blank" rel="noopener">' + titleCase(slug) + '</a></li>';
     });
   })();`;
 
