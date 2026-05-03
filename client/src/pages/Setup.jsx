@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { setupApi, reposApi } from '../api.js';
+import GithubTokenHelp from '../components/GithubTokenHelp.jsx';
 
 const STEPS = ['GitHub Token', 'Repo & Type', 'Set Up Repo', 'AI Provider'];
 
@@ -30,6 +31,8 @@ const SITE_TYPES = [
 
 export default function Setup({ onComplete }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tokenExpired = searchParams.get('reason') === 'token_expired';
   const [step, setStep] = useState(0);
   const [token, setToken] = useState('');
   const [user, setUser] = useState(null);
@@ -37,18 +40,18 @@ export default function Setup({ onComplete }) {
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [siteType, setSiteType] = useState('blog');
   const [readiness, setReadiness] = useState(null);
-  const [createIndex, setCreateIndex] = useState(true);
   const [createSnapshot, setCreateSnapshot] = useState(true);
   const [initResult, setInitResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
 
   async function validateToken() {
     setError(''); setLoading(true);
     try {
       const data = await setupApi.validateToken(token);
       setUser(data);
-      const repoList = await reposApi.list();
+      const repoList = await reposApi.list(token);
       setRepos(repoList);
       setStep(1);
     } catch (e) { setError(e.message); }
@@ -59,7 +62,7 @@ export default function Setup({ onComplete }) {
     if (!selectedRepo) return;
     setError(''); setLoading(true);
     try {
-      const check = await reposApi.check(selectedRepo.owner, selectedRepo.name, selectedRepo.default_branch);
+      const check = await reposApi.check(selectedRepo.owner, selectedRepo.name, selectedRepo.default_branch, token);
       setReadiness(check);
       setStep(2);
     } catch (e) {
@@ -82,22 +85,16 @@ export default function Setup({ onComplete }) {
         sections: [],
       });
 
-      // Initialize folders + optionally create index
-      const needsFolders = siteType === 'blog' ? !readiness?.hasBlogFolders
-        : siteType === 'wiki' ? !readiness?.hasWikiFolders
-        : !readiness?.hasBlogFolders || !readiness?.hasWikiFolders;
+      // Always init: create missing folders and landing page
       const needsIndex = !readiness?.hasIndex;
-
-      if (needsFolders || (createIndex && needsIndex)) {
-        try {
-          const result = await reposApi.init(selectedRepo.owner, selectedRepo.name, selectedRepo.default_branch, {
-            siteType,
-            createSnapshot,
-            createIndex: createIndex && needsIndex,
-          });
-          setInitResult(result);
-        } catch { /* non-fatal */ }
-      }
+      try {
+        const result = await reposApi.init(selectedRepo.owner, selectedRepo.name, selectedRepo.default_branch, {
+          siteType,
+          createSnapshot,
+          createIndex: needsIndex,
+        });
+        setInitResult(result);
+      } catch { /* non-fatal */ }
 
       setStep(3);
     } catch (e) { setError(e.message); }
@@ -139,10 +136,26 @@ export default function Setup({ onComplete }) {
         {/* Step 0 — Token */}
         {step === 0 && (
           <>
+            {tokenExpired && (
+              <div className="alert alert-error" style={{ marginBottom: '16px' }}>
+                Your GitHub token has expired or been revoked. Enter a new one below to continue.
+              </div>
+            )}
             <p className="setup-desc">
-              Create a GitHub Personal Access Token with <strong>repo</strong> + <strong>read:user</strong> scopes, then paste it below.
-              See <strong>How it works → GitHub access</strong> for full instructions.
+              Paste a GitHub Personal Access Token below.{' '}
+              <button
+                type="button"
+                className="btn-link"
+                onClick={() => setShowGuide(v => !v)}
+              >
+                {showGuide ? 'Hide guide ↑' : 'How to create one ↓'}
+              </button>
             </p>
+            {showGuide && (
+              <div className="card mb-4" style={{ background: 'var(--bg-2)', border: '1px solid var(--border)' }}>
+                <GithubTokenHelp />
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Personal Access Token</label>
               <input
@@ -150,7 +163,7 @@ export default function Setup({ onComplete }) {
                 type="password"
                 placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
                 value={token}
-                onChange={e => setToken(e.target.value)}
+                onChange={e => setToken(e.target.value.trim())}
                 onKeyDown={e => e.key === 'Enter' && token && !loading && validateToken()}
                 autoFocus
               />
@@ -229,17 +242,23 @@ export default function Setup({ onComplete }) {
             )}
 
             <div className="form-group">
-              {(!readiness?.hasBlogFolders && hasBlog) || (!readiness?.hasWikiFolders && hasWiki) ? (
+              {((!readiness?.hasBlogFolders && hasBlog) || (!readiness?.hasWikiFolders && hasWiki)) && (
                 <label className="flex items-center gap-2 text-sm mb-2" style={{ color: 'var(--text-1)' }}>
                   <input type="checkbox" checked readOnly disabled />
                   <span>Create folder structure <span className="text-3">(required)</span></span>
                 </label>
-              ) : null}
+              )}
 
               {!readiness?.hasIndex && (
-                <label className="flex items-center gap-2 text-sm mb-2" style={{ cursor: 'pointer', color: 'var(--text-1)' }}>
-                  <input type="checkbox" checked={createIndex} onChange={e => setCreateIndex(e.target.checked)} />
-                  <span>Create a starter <span className="font-mono">index{readiness?.ssg === 'jekyll' ? '.md' : '.html'}</span> homepage</span>
+                <label className="flex items-center gap-2 text-sm mb-2" style={{ color: 'var(--text-1)' }}>
+                  <input type="checkbox" checked readOnly disabled />
+                  <span>
+                    Create landing page{' '}
+                    <span className="font-mono">
+                      {readiness?.ssg === 'jekyll' || readiness?.ssg === 'hugo' ? 'index.md' : 'index.html'}
+                    </span>
+                    {' '}<span className="text-3">(required — links to your {siteType === 'wiki' ? 'pages' : 'posts'})</span>
+                  </span>
                 </label>
               )}
 
@@ -265,9 +284,10 @@ export default function Setup({ onComplete }) {
             <p className="setup-desc">
               You're all set! Optionally configure an AI provider for content enhancement — or do it anytime from <strong>AI Providers</strong> in the sidebar.
             </p>
-            {initResult?.snapshotTag && (
+            {(initResult?.snapshotTag || initResult?.index?.status === 'created') && (
               <div className="alert mb-3" style={{ background: 'var(--success-soft)', color: 'var(--success-text)', border: 'none', borderRadius: 'var(--radius)', fontSize: '0.8125rem' }}>
-                Snapshot saved: <span className="font-mono">{initResult.snapshotTag}</span>
+                {initResult.snapshotTag && <div>Snapshot saved: <span className="font-mono">{initResult.snapshotTag}</span></div>}
+                {initResult.index?.status === 'created' && <div>Landing page created: <span className="font-mono">{initResult.index.file}</span></div>}
               </div>
             )}
             <div className="card mb-4" style={{ background: 'var(--brand-soft)', border: '1px solid var(--brand)' }}>

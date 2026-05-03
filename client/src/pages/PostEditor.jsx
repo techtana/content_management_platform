@@ -25,46 +25,49 @@ function TagInput({ values, onChange, options, placeholder }) {
   }
 
   return (
-    <div className="tag-input-wrap" onClick={() => inputRef.current?.focus()}>
-      {values.map(t => (
-        <span key={t} className="tag-chip">
-          {t}
-          <button
-            type="button"
-            className="tag-chip-remove"
-            onMouseDown={e => { e.preventDefault(); removeTag(t); }}
-          >×</button>
-        </span>
-      ))}
-      <div style={{ position: 'relative', flex: '1 1 80px', minWidth: '80px' }}>
-        <input
-          ref={inputRef}
-          className="tag-inner-input"
-          value={input}
-          onChange={e => { setInput(e.target.value); setOpen(true); }}
-          onKeyDown={e => {
-            if ((e.key === 'Enter' || e.key === ',') && input.trim()) { e.preventDefault(); addTag(input); }
-            if (e.key === 'Backspace' && !input && values.length > 0) removeTag(values[values.length - 1]);
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder={values.length === 0 ? (placeholder || 'Add…') : ''}
-        />
-        {open && suggestions.length > 0 && (
-          <div className="combobox-dropdown">
-            {suggestions.map(o => (
-              <div
-                key={o}
-                className="combobox-option"
-                onMouseDown={e => { e.preventDefault(); addTag(o); }}
-              >
-                {o}
-              </div>
-            ))}
-          </div>
-        )}
+    <>
+      <div className="tag-input-wrap" onClick={() => inputRef.current?.focus()}>
+        {values.map(t => (
+          <span key={t} className="tag-chip">
+            {t}
+            <button
+              type="button"
+              className="tag-chip-remove"
+              onMouseDown={e => { e.preventDefault(); removeTag(t); }}
+            >×</button>
+          </span>
+        ))}
+        <div style={{ position: 'relative', flex: '1 1 80px', minWidth: '80px' }}>
+          <input
+            ref={inputRef}
+            className="tag-inner-input"
+            value={input}
+            onChange={e => { setInput(e.target.value); setOpen(true); }}
+            onKeyDown={e => {
+              if ((e.key === 'Enter' || e.key === ',') && input.trim()) { e.preventDefault(); addTag(input); }
+              if (e.key === 'Backspace' && !input && values.length > 0) removeTag(values[values.length - 1]);
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder={values.length === 0 ? (placeholder || 'Add…') : ''}
+          />
+          {open && suggestions.length > 0 && (
+            <div className="combobox-dropdown">
+              {suggestions.map(o => (
+                <div
+                  key={o}
+                  className="combobox-option"
+                  onMouseDown={e => { e.preventDefault(); addTag(o); }}
+                >
+                  {o}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+      {open && !suggestions.length && <div className="form-help" style={{ marginTop: 3 }}>Enter or , to add</div>}
+    </>
   );
 }
 

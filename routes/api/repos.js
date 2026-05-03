@@ -8,7 +8,7 @@ router.use(ensureApiAuth);
 
 router.get('/', async (req, res) => {
   try {
-    const token = getToken();
+    const token = req.headers['x-setup-token'] || getToken();
     const repos = await listUserRepos(token);
     const ghPages = repos.filter(r => r.has_pages || r.name.endsWith('.github.io'));
     res.json(ghPages.map(r => ({
@@ -59,7 +59,7 @@ router.get('/check', async (req, res) => {
   if (!owner || !repo) return res.status(400).json({ error: 'owner and repo required' });
 
   try {
-    const token = getToken();
+    const token = req.headers['x-setup-token'] || getToken();
     const br = branch || 'main';
 
     async function exists(path) {
@@ -150,7 +150,7 @@ router.post('/init', async (req, res) => {
       try { await getFile(owner, repo, '_config.yml', br, token); ssg = 'jekyll'; } catch {}
       try { await getFile(owner, repo, 'config.toml', br, token); ssg = 'hugo'; } catch {}
 
-      const template = buildIndexTemplate(type, ssg);
+      const template = buildIndexTemplate(type, ssg, owner, repo, br);
       const indexPath = template.file;
       try {
         // Don't overwrite existing index
@@ -172,58 +172,131 @@ router.post('/init', async (req, res) => {
   }
 });
 
-function buildIndexTemplate(siteType, ssg) {
-  if (ssg === 'jekyll') {
-    if (siteType === 'wiki' || siteType === 'mixed') {
-      return {
-        file: 'index.md',
-        content: `---
-title: Home
-layout: page
----
+function buildIndexTemplate(siteType, ssg, owner, repo, branch) {
+  const hasBlog = siteType === 'blog' || siteType === 'mixed';
+  const hasWiki = siteType === 'wiki' || siteType === 'mixed';
 
-## Pages
+  // ── Jekyll ──────────────────────────────────────────────────────────────
+  if (ssg === 'jekyll') {
+    const parts = [];
+
+    if (hasWiki) {
+      parts.push(`## Pages
 
 {% assign wiki_pages = site.pages | where_exp:"p","p.dir contains '_pages'" | sort: 'title' %}
+{% if wiki_pages.size > 0 %}
 {% for p in wiki_pages %}
 - [{{ p.title | default: p.name }}]({{ p.url | relative_url }})
 {% endfor %}
-${siteType === 'mixed' ? `
-## Recent Posts
+{% else %}
+*No pages yet. Add markdown files to \`_pages/\`.*
+{% endif %}`);
+    }
 
+    if (hasBlog) {
+      parts.push(`## Recent Posts
+
+{% if site.posts.size > 0 %}
 {% for post in site.posts limit:10 %}
 - [{{ post.title }}]({{ post.url | relative_url }}) — {{ post.date | date: "%b %-d, %Y" }}
-{% endfor %}` : ''}
-`,
+{% endfor %}
+{% else %}
+*No posts yet. Publish a post to see it here.*
+{% endif %}`);
+    }
+
+    if (siteType === 'blog') {
+      return {
+        file: 'index.md',
+        content: `---\ntitle: Home\nlayout: home\n---\n`,
       };
     }
-    // blog / default
+
     return {
       file: 'index.md',
-      content: `---
-title: Home
-layout: home
----
-`,
+      content: `---\ntitle: Home\nlayout: page\n---\n\n${parts.join('\n\n')}\n`,
     };
   }
 
-  // Plain HTML fallback (works without any SSG)
-  const blogSection = `
-  <section>
+  // ── Hugo ─────────────────────────────────────────────────────────────────
+  if (ssg === 'hugo') {
+    const parts = [];
+    if (hasWiki) parts.push(`{{- range where .Site.Pages "Section" "pages" }}\n- [{{ .Title }}]({{ .Permalink }})\n{{- end }}`);
+    if (hasBlog) parts.push(`## Recent Posts\n\n{{- range first 10 (where .Site.RegularPages "Section" "posts") }}\n- [{{ .Title }}]({{ .Permalink }}) — {{ .Date.Format "Jan 2, 2006" }}\n{{- end }}`);
+    return {
+      file: 'index.md',
+      content: `---\ntitle: Home\n---\n\n${parts.join('\n\n')}\n`,
+    };
+  }
+
+  // ── Plain HTML (no SSG detected) ─────────────────────────────────────────
+  const siteName = (repo || 'My Site')
+    .replace(/\.github\.io$/, '')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
+
+  const OWNER  = owner  || '';
+  const REPO   = repo   || '';
+  const BRANCH = branch || 'main';
+
+  const navLinks = [
+    ...(hasBlog ? ['<a href="#posts">Posts</a>'] : []),
+    ...(hasWiki ? ['<a href="#pages">Pages</a>'] : []),
+  ].join('\n      ');
+
+  const blogSection = hasBlog ? `  <section id="posts">
     <h2>Posts</h2>
-    <p>Posts live in <code>_posts/</code>. Configure Jekyll, Hugo, or another static site generator to render them automatically.</p>
-  </section>`;
+    <ul class="post-list" id="post-list"><li class="empty">Loading…</li></ul>
+  </section>` : '';
 
-  const wikiSection = `
-  <section>
+  const wikiSection = hasWiki ? `  <section id="pages">
     <h2>Pages</h2>
-    <p>Pages live in <code>_pages/</code>. Configure your static site generator to render them.</p>
-  </section>`;
+    <ul class="post-list" id="page-list"><li class="empty">Loading…</li></ul>
+  </section>` : '';
 
-  const body = siteType === 'wiki' ? wikiSection
-    : siteType === 'mixed' ? blogSection + wikiSection
-    : blogSection;
+  const sections = [blogSection, wikiSection].filter(Boolean).join('\n\n');
+
+  const script = `
+  (function () {
+    var OWNER = '${OWNER}', REPO = '${REPO}', BRANCH = '${BRANCH}';
+
+    function titleCase(s) {
+      return s.replace(/-/g, ' ').replace(/\\b\\w/g, function (c) { return c.toUpperCase(); });
+    }
+
+    function load(dir, listId, makeItem) {
+      var el = document.getElementById(listId);
+      if (!el) return;
+      fetch('https://api.github.com/repos/' + OWNER + '/' + REPO + '/contents/' + dir + '?ref=' + BRANCH)
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (files) {
+          var items = files
+            .filter(function (f) { return f.name.endsWith('.md') && f.name !== '.gitkeep'; })
+            .sort(function (a, b) { return b.name.localeCompare(a.name); })
+            .map(makeItem);
+          el.innerHTML = items.length
+            ? items.join('')
+            : '<li class="empty">No content yet.</li>';
+        })
+        .catch(function () {
+          el.innerHTML = '<li class="empty">No content yet.</li>';
+        });
+    }
+
+    load('_posts', 'post-list', function (f) {
+      var m = f.name.match(/^(\\d{4}-\\d{2}-\\d{2})-(.+)\\.md$/);
+      var date = m ? new Date(m[1] + 'T12:00:00Z').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+      var title = m ? titleCase(m[2]) : f.name.replace('.md', '');
+      var href = m ? '/' + m[2] + '/' : '/_posts/' + f.name;
+      return '<li><a href="' + href + '">' + title + '</a>' + (date ? '<div class="post-date">' + date + '</div>' : '') + '</li>';
+    });
+
+    load('_pages', 'page-list', function (f) {
+      var slug = f.name.replace('.md', '');
+      return '<li><a href="/' + slug + '/">' + titleCase(slug) + '</a></li>';
+    });
+  })();`;
 
   return {
     file: 'index.html',
@@ -232,20 +305,36 @@ layout: home
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Site</title>
+  <title>${siteName}</title>
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 60px auto; padding: 0 24px; line-height: 1.6; color: #1e293b; }
-    h1 { font-size: 2rem; font-weight: 800; margin-bottom: 4px; }
-    h2 { font-size: 1.25rem; font-weight: 600; margin-top: 40px; margin-bottom: 8px; }
-    p { color: #475569; }
-    a { color: #6366f1; }
-    code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.875em; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 60px auto; padding: 0 24px 80px; line-height: 1.6; color: #1e293b; background: #f8fafc; }
+    header { margin-bottom: 48px; }
+    h1 { font-size: 2rem; font-weight: 800; color: #0f172a; }
+    nav { display: flex; gap: 16px; margin-top: 16px; }
+    nav a { color: #6366f1; font-weight: 500; text-decoration: none; border-bottom: 2px solid transparent; padding-bottom: 2px; transition: border-color 0.15s; }
+    nav a:hover { border-color: #6366f1; }
+    section { margin-bottom: 40px; }
+    h2 { font-size: 1.125rem; font-weight: 700; color: #0f172a; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
+    .post-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .post-list li { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; }
+    .post-list a { font-weight: 600; color: #0f172a; text-decoration: none; }
+    .post-list a:hover { color: #6366f1; }
+    .post-date { font-size: 0.8125rem; color: #94a3b8; margin-top: 2px; }
+    .empty { color: #94a3b8; font-size: 0.875rem; padding: 4px 0; list-style: none; }
   </style>
 </head>
 <body>
-  <h1>My Site</h1>
-  <p>Managed with Pages CMS.</p>
-${body}
+  <header>
+    <h1>${siteName}</h1>
+    <nav>
+      ${navLinks}
+    </nav>
+  </header>
+
+${sections}
+  <script>${script}
+  </script>
 </body>
 </html>
 `,

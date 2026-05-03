@@ -1,10 +1,15 @@
 const BASE = '/api';
 
-async function request(method, path, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+async function request(method, path, body, extraHeaders) {
+  const opts = { method, headers: { 'Content-Type': 'application/json', ...extraHeaders } };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(BASE + path, opts);
   const data = await res.json().catch(() => ({}));
+  // Token invalid/expired — redirect to setup (skip for setup/* calls themselves)
+  if (res.status === 401 && !path.startsWith('/setup/')) {
+    window.location.href = '/setup?reason=token_expired';
+    return;
+  }
   if (!res.ok) throw Object.assign(new Error(data.error || 'Request failed'), { status: res.status, data });
   return data;
 }
@@ -22,6 +27,7 @@ export const setupApi = {
   status: () => api.get('/setup/status'),
   validateToken: (token) => api.post('/setup/validate-token', { token }),
   complete: (token, site) => api.post('/setup/complete', { token, site }),
+  reset: () => api.post('/setup/reset'),
 };
 
 export const meApi = {
@@ -30,10 +36,10 @@ export const meApi = {
 };
 
 export const reposApi = {
-  list: () => api.get('/repos'),
+  list: (setupToken) => request('GET', '/repos', undefined, setupToken ? { 'x-setup-token': setupToken } : undefined),
   detect: (owner, repo) => api.get(`/repos/detect?owner=${owner}&repo=${repo}`),
   enhancePolicies: (owner, repo) => api.get(`/repos/enhance-policies?owner=${owner}&repo=${repo}`),
-  check: (owner, repo, branch) => api.get(`/repos/check?owner=${owner}&repo=${repo}${branch ? `&branch=${branch}` : ''}`),
+  check: (owner, repo, branch, setupToken) => request('GET', `/repos/check?owner=${owner}&repo=${repo}${branch ? `&branch=${branch}` : ''}`, undefined, setupToken ? { 'x-setup-token': setupToken } : undefined),
   init: (owner, repo, branch, opts) => api.post('/repos/init', { owner, repo, branch, ...opts }),
   create: (name, description) => api.post('/repos/create', { name, description }),
 };

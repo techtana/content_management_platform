@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { meApi, sitesApi, reposApi } from '../api.js';
+import { meApi, sitesApi, reposApi, setupApi } from '../api.js';
 import { Sidebar } from './Dashboard.jsx';
 import { DarkModeContext } from '../App.jsx';
 
@@ -16,6 +16,24 @@ export default function Settings() {
   const [initLoading, setInitLoading] = useState(false);
   const [initResult, setInitResult] = useState(null);
   const [initError, setInitError] = useState('');
+  const [initCheck, setInitCheck] = useState(null);
+  const [initChecking, setInitChecking] = useState(false);
+
+  // Reset state
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
+
+  async function handleReset() {
+    setResetLoading(true); setResetError('');
+    try {
+      await setupApi.reset();
+      window.location.href = '/setup';
+    } catch (e) {
+      setResetError('Reset failed: ' + e.message);
+      setResetLoading(false);
+    }
+  }
 
   // Create new repo state
   const [createOpen, setCreateOpen] = useState(false);
@@ -52,11 +70,29 @@ export default function Settings() {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
 
+  async function runCheck(site) {
+    if (!site) return;
+    setInitChecking(true); setInitCheck(null); setInitResult(null);
+    try {
+      const check = await reposApi.check(site.repo_owner, site.repo_name, site.default_branch);
+      setInitCheck(check);
+    } catch { setInitCheck(null); }
+    finally { setInitChecking(false); }
+  }
+
   useEffect(() => {
     Promise.all([meApi.get(), sitesApi.list()])
-      .then(([m, s]) => { setMe(m); setSites(s); })
+      .then(([m, s]) => {
+        setMe(m); setSites(s);
+        if (s.length === 1) runCheck(s[0]);
+      })
       .catch(() => {});
   }, []);
+
+  // Re-check whenever the selected site changes (multi-site)
+  useEffect(() => {
+    if (initSite) runCheck(initSite);
+  }, [initSite]);
 
   async function openAddSite() {
     setAddOpen(true);
@@ -270,7 +306,7 @@ export default function Settings() {
             <div className="card mb-4">
               <div className="card-title mb-2">Initialize Repo Structure</div>
               <div className="text-sm text-3 mb-3">
-                Create <span className="font-mono">_posts/</span>, <span className="font-mono">_drafts/</span>, and <span className="font-mono">_archive/</span> folders on a repo. Existing content is not touched.
+                Creates missing content folders and a landing page. Safe to run on an existing repo — nothing is overwritten.
               </div>
 
               {sites.length > 1 && (
@@ -279,7 +315,10 @@ export default function Settings() {
                   <select
                     className="form-select"
                     value={initSite?.id || ''}
-                    onChange={e => setInitSite(sites.find(s => s.id === e.target.value) || null)}
+                    onChange={e => {
+                      setInitSite(sites.find(s => s.id === e.target.value) || null);
+                      setInitResult(null); setInitError('');
+                    }}
                   >
                     <option value="">— pick a site —</option>
                     {sites.map(s => (
@@ -289,18 +328,70 @@ export default function Settings() {
                 </div>
               )}
 
+              {/* Readiness check */}
+              {(() => {
+                const target = sites.length === 1 ? sites[0] : initSite;
+                if (!target) return null;
+                const t = target.site_type || 'blog';
+                const hasBlog = t === 'blog' || t === 'mixed';
+                const hasWiki = t === 'wiki' || t === 'mixed';
+
+                if (initChecking) return <div className="text-xs text-3 mb-3">Checking repo…</div>;
+                if (!initCheck) return null;
+
+                return (
+                  <div className="readiness-card mb-3">
+                    <div className="text-xs font-semibold text-3 mb-2" style={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>Current state</div>
+                    <div className="readiness-row">
+                      <span className={`readiness-icon${initCheck.hasIndex ? ' ok' : ' warn'}`}>{initCheck.hasIndex ? '✓' : '!'}</span>
+                      <div>
+                        <span className="text-sm" style={{ color: initCheck.hasIndex ? 'var(--success)' : 'var(--text-2)', fontWeight: 500 }}>Landing page</span>
+                        <span className="text-xs text-3" style={{ marginLeft: '8px' }}>{initCheck.hasIndex ? (initCheck.indexFile || 'found') : 'will be created'}</span>
+                      </div>
+                    </div>
+                    {hasBlog && (
+                      <div className="readiness-row">
+                        <span className={`readiness-icon${initCheck.hasBlogFolders ? ' ok' : ' warn'}`}>{initCheck.hasBlogFolders ? '✓' : '!'}</span>
+                        <div>
+                          <span className="text-sm" style={{ color: initCheck.hasBlogFolders ? 'var(--success)' : 'var(--text-2)', fontWeight: 500 }}>Blog folders</span>
+                          <span className="text-xs text-3" style={{ marginLeft: '8px' }}>{initCheck.hasBlogFolders ? '_posts/, _drafts/' : 'will be created'}</span>
+                        </div>
+                      </div>
+                    )}
+                    {hasWiki && (
+                      <div className="readiness-row">
+                        <span className={`readiness-icon${initCheck.hasWikiFolders ? ' ok' : ' warn'}`}>{initCheck.hasWikiFolders ? '✓' : '!'}</span>
+                        <div>
+                          <span className="text-sm" style={{ color: initCheck.hasWikiFolders ? 'var(--success)' : 'var(--text-2)', fontWeight: 500 }}>Wiki folder</span>
+                          <span className="text-xs text-3" style={{ marginLeft: '8px' }}>{initCheck.hasWikiFolders ? '_pages/' : 'will be created'}</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="readiness-row">
+                      <span className={`readiness-icon${initCheck.ssg && initCheck.ssg !== 'unknown' ? ' ok' : ' warn'}`}>{initCheck.ssg && initCheck.ssg !== 'unknown' ? '✓' : '!'}</span>
+                      <div>
+                        <span className="text-sm" style={{ color: initCheck.ssg && initCheck.ssg !== 'unknown' ? 'var(--success)' : 'var(--text-2)', fontWeight: 500 }}>SSG detected</span>
+                        <span className="text-xs text-3" style={{ marginLeft: '8px' }}>{initCheck.ssg || 'unknown'}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <label className="flex items-center gap-2 text-sm mb-3" style={{ cursor: 'pointer' }}>
                 <input type="checkbox" checked={initSnapshot} onChange={e => setInitSnapshot(e.target.checked)} />
-                <span>Create git snapshot tag before changes (recommended)</span>
+                <span>Create git snapshot tag before changes <span className="text-xs text-3">(recommended)</span></span>
               </label>
 
               {initError && <div className="alert alert-error mb-3">{initError}</div>}
 
               {initResult && (
-                <div className="alert mb-3" style={{ background: 'var(--brand-soft)', color: 'var(--brand-text)', border: 'none', borderRadius: 'var(--radius)' }}>
-                  {initResult.snapshotTag && <div className="text-xs mb-1">Snapshot: <span className="font-mono">{initResult.snapshotTag}</span></div>}
+                <div className="alert mb-3" style={{ background: 'var(--success-soft)', color: 'var(--success-text)', border: 'none', borderRadius: 'var(--radius)', fontSize: '0.8125rem' }}>
+                  {initResult.snapshotTag && <div>Snapshot: <span className="font-mono">{initResult.snapshotTag}</span></div>}
+                  {initResult.index?.status === 'created' && <div>Landing page created: <span className="font-mono">{initResult.index.file}</span></div>}
+                  {initResult.index?.status === 'exists' && <div>Landing page already exists: <span className="font-mono">{initResult.index.file}</span></div>}
                   {initResult.dirs?.map(d => (
-                    <div key={d.dir} className="text-xs font-mono">{d.dir}/: {d.status}</div>
+                    <div key={d.dir} className="font-mono" style={{ fontSize: '0.75rem' }}>{d.dir}/: {d.status}</div>
                   ))}
                 </div>
               )}
@@ -312,14 +403,23 @@ export default function Settings() {
                   if (!target) return;
                   setInitLoading(true); setInitError(''); setInitResult(null);
                   try {
-                    const result = await reposApi.init(target.repo_owner, target.repo_name, target.default_branch, initSnapshot);
+                    const result = await reposApi.init(
+                      target.repo_owner, target.repo_name, target.default_branch,
+                      {
+                        siteType: target.site_type || 'blog',
+                        createSnapshot: initSnapshot,
+                        createIndex: !initCheck?.hasIndex,
+                      }
+                    );
                     setInitResult(result);
+                    // Refresh check to reflect new state
+                    runCheck(target);
                   } catch (e) { setInitError('Init failed: ' + e.message); }
                   finally { setInitLoading(false); }
                 }}
-                disabled={initLoading || (sites.length > 1 && !initSite)}
+                disabled={initLoading || initChecking || (sites.length > 1 && !initSite)}
               >
-                {initLoading ? 'Initializing…' : 'Initialize Folders'}
+                {initLoading ? 'Initializing…' : 'Initialize Repo Structure'}
               </button>
             </div>
           )}
@@ -367,12 +467,47 @@ export default function Settings() {
             )}
           </div>
 
-          <div className="card">
+          <div className="card mb-4">
             <div className="card-title mb-2">Advanced</div>
             <div className="text-sm text-3 mb-4">
               Re-run the setup wizard to update your GitHub token or connect a different repository.
             </div>
             <Link className="btn btn-secondary" to="/setup">Re-run Setup Wizard</Link>
+          </div>
+
+          <div className="card" style={{ borderColor: 'var(--danger, #ef4444)' }}>
+            <div className="card-title mb-2" style={{ color: 'var(--danger, #ef4444)' }}>Danger Zone</div>
+            {!resetOpen ? (
+              <>
+                <div className="text-sm text-3 mb-4">
+                  Disconnect GitHub and erase all local CMS data — sites, AI providers, instructions, and your stored token. Your GitHub repos are not affected.
+                </div>
+                <button className="btn btn-danger" onClick={() => setResetOpen(true)}>
+                  Reset CMS
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="alert alert-error mb-4" style={{ fontSize: '0.875rem' }}>
+                  <strong>This will permanently delete:</strong>
+                  <ul style={{ marginTop: '6px', paddingLeft: '18px', lineHeight: 1.8 }}>
+                    <li>Your stored GitHub token</li>
+                    <li>All connected sites ({sites.length})</li>
+                    <li>All AI providers and instructions</li>
+                  </ul>
+                  <div style={{ marginTop: '8px' }}>Your GitHub repositories and their content are <strong>not</strong> affected.</div>
+                </div>
+                {resetError && <div className="alert alert-error mb-3">{resetError}</div>}
+                <div className="flex gap-2">
+                  <button className="btn btn-secondary" onClick={() => { setResetOpen(false); setResetError(''); }} disabled={resetLoading}>
+                    Cancel
+                  </button>
+                  <button className="btn btn-danger" onClick={handleReset} disabled={resetLoading}>
+                    {resetLoading ? 'Resetting…' : 'Yes, Reset Everything'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
         </main>

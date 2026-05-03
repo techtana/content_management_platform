@@ -10,7 +10,22 @@ function getToken() {
 }
 
 function createOctokit(token) {
-  return new Octokit({ auth: token || getToken() });
+  const octokit = new Octokit({ auth: token || getToken() });
+  octokit.hook.error('request', (error) => {
+    if (error.status === 401) {
+      const ghMessage = error.response?.data?.message;
+      const e = new Error(
+        ghMessage
+          ? `GitHub token rejected: ${ghMessage}`
+          : 'GitHub token is invalid or expired. Re-run setup to enter a new token.'
+      );
+      e.status = 401;
+      e.response = error.response;
+      throw e;
+    }
+    throw error;
+  });
+  return octokit;
 }
 
 async function getFile(owner, repo, filePath, ref, token) {

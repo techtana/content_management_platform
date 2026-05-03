@@ -1,4 +1,5 @@
 import { Sidebar } from './Dashboard.jsx';
+import GithubTokenHelp from '../components/GithubTokenHelp.jsx';
 
 export default function Help() {
   return (
@@ -28,80 +29,7 @@ export default function Help() {
               The CMS writes to your repository using a GitHub <strong>Personal Access Token (PAT)</strong>.
               The token is encrypted before being stored locally and is never sent anywhere except the GitHub API.
             </p>
-
-            <div className="help-steps">
-              <div className="help-step">
-                <div className="help-step-num">1</div>
-                <div className="help-step-body">
-                  <div className="help-step-title">Open GitHub token settings</div>
-                  <p className="text-sm" style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>
-                    Go to <strong>github.com → Settings → Developer settings → Personal access tokens → Tokens (classic)</strong>.
-                    Fine-grained tokens also work; see step 2b below.
-                  </p>
-                </div>
-              </div>
-
-              <div className="help-step">
-                <div className="help-step-num">2</div>
-                <div className="help-step-body">
-                  <div className="help-step-title">Choose token type and grant scopes</div>
-                  <p className="text-sm mb-3" style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>
-                    <strong>Classic token (simpler)</strong> — click <em>Generate new token (classic)</em> and tick these scopes:
-                  </p>
-                  <div className="help-scope-list mb-3">
-                    {[
-                      { scope: 'repo', desc: 'Full read/write access to repos (required to commit files)' },
-                      { scope: 'read:user', desc: 'Read your username and avatar for the profile card' },
-                    ].map(({ scope, desc }) => (
-                      <div key={scope} className="help-scope-row">
-                        <code className="help-scope-badge">{scope}</code>
-                        <span className="text-sm" style={{ color: 'var(--text-2)' }}>{desc}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-sm mb-2" style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>
-                    <strong>Fine-grained token (more locked-down)</strong> — click <em>Generate new token (fine-grained)</em> and set:
-                  </p>
-                  <div className="help-scope-list">
-                    {[
-                      { scope: 'Resource owner', desc: 'Your GitHub username (or the org that owns the repo)' },
-                      { scope: 'Repository access', desc: 'Only select repositories — pick the repos this CMS will manage' },
-                      { scope: 'Contents', desc: 'Read and write — lets the CMS commit files' },
-                      { scope: 'Metadata', desc: 'Read-only — required by GitHub for all fine-grained tokens' },
-                      { scope: 'Pages', desc: 'Read and write — only needed if you use "Create new repo" from Settings' },
-                    ].map(({ scope, desc }) => (
-                      <div key={scope} className="help-scope-row">
-                        <code className="help-scope-badge">{scope}</code>
-                        <span className="text-sm" style={{ color: 'var(--text-2)' }}>{desc}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="help-step">
-                <div className="help-step-num">3</div>
-                <div className="help-step-body">
-                  <div className="help-step-title">Copy the token immediately</div>
-                  <p className="text-sm" style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>
-                    GitHub shows the token only once. Copy it and paste it into the CMS setup wizard (<strong>Settings → Re-run Setup Wizard</strong> if you need to update it).
-                    The token starts with <code className="help-scope-badge">ghp_</code> (classic) or <code className="help-scope-badge">github_pat_</code> (fine-grained).
-                  </p>
-                </div>
-              </div>
-
-              <div className="help-step">
-                <div className="help-step-num">4</div>
-                <div className="help-step-body">
-                  <div className="help-step-title">Set a sensible expiry</div>
-                  <p className="text-sm" style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>
-                    GitHub recommends 90 days or less. When your token expires the CMS will return auth errors — re-run the setup wizard with a fresh token to fix it.
-                    Fine-grained tokens can be set to <em>No expiration</em> for personal single-user use.
-                  </p>
-                </div>
-              </div>
-            </div>
-
+            <GithubTokenHelp />
             <div className="alert mt-4" style={{ background: 'var(--warn-soft)', color: 'var(--warn-text)', border: 'none', borderRadius: 'var(--radius)', fontSize: '0.8125rem', lineHeight: 1.6 }}>
               <strong>Token scope and repo visibility:</strong> a classic <code style={{ background: 'rgba(0,0,0,.08)', borderRadius: '3px', padding: '1px 5px' }}>repo</code> token grants access to <em>all</em> your repos.
               If you manage a single public blog, prefer a fine-grained token scoped to just that repository.
