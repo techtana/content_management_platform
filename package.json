@@ -11,7 +11,10 @@
     "dev:server": "cross-env NODE_ENV=development nodemon app.js",
     "dev:client": "vite",
     "build": "vite build",
-    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\""
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "electron:dev": "concurrently --kill-others \"npm:dev:server\" \"npm:dev:client\" \"wait-on http://127.0.0.1:3000 http://127.0.0.1:5173 && cross-env NODE_ENV=development electron electron/main.js\"",
+    "electron:build": "vite build && electron-builder --config electron-builder.yml",
+    "electron:rebuild": "electron-rebuild -f -w better-sqlite3"
   },
   "keywords": [],
   "author": "Tech Tana",
@@ -35,15 +38,21 @@
     "uuid": "^14.0.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
     "cross-env": "^10.0.0",
+    "electron": "^36.9.5",
+    "electron-builder": "^26.8.1",
     "nodemon": "^3.1.10",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "wait-on": "^8.0.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3"
+      "better-sqlite3",
+      "electron",
+      "electron-winstaller"
     ]
   }
 }
