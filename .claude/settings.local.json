@@ -10,7 +10,9 @@
       "Bash(node -e \"require\\('./config/db'\\); require\\('./services/crypto'\\); require\\('./services/github'\\); require\\('./services/ssgDetector'\\); require\\('./services/frontmatterParser'\\); require\\('./services/ai'\\); require\\('./services/notebook'\\); console.log\\('All modules load OK'\\)\")",
       "Bash(node -e ' *)",
       "Bash(pnpm build *)",
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Tanat\\\\OneDrive\\\\_Project_Software\\\\!Project__Personal Blog\\\\content_management_platform\" -Recurse -Depth 2)",
+      "Bash(Select-Object FullName)"
     ]
   }
 }
