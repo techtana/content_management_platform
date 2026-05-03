@@ -134,9 +134,13 @@ export default function PostEditor() {
   }
 
   useEffect(() => {
-    sitesApi.get(siteId).then(setSite).catch(() => {});
+    Promise.all([sitesApi.get(siteId), aiApi.instructions()]).then(([s, instrs]) => {
+      setSite(s);
+      setInstructions(instrs);
+      const def = s?.sections?.find(sec => sec.slug === 'posts')?.defaultInstructionId;
+      if (def && instrs.some(i => i.id === def)) setSelectedInstruction(def);
+    }).catch(() => {});
     aiApi.providers().then(p => { setAiProviders(p); if (p.length) setSelectedProvider(p[0].id); }).catch(() => {});
-    aiApi.instructions().then(setInstructions).catch(() => {});
     postsApi.taxonomy(siteId).then(setTaxonomy).catch(() => {});
   }, [siteId]);
 

@@ -83,7 +83,9 @@ router.patch('/:id/sections/:slug/default-instruction', (req, res) => {
     const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
     if (!site) return res.status(404).json({ error: 'Site not found' });
 
-    const sections = dedupeSections(JSON.parse(site.sections_json)).map(s =>
+    let sections = dedupeSections(JSON.parse(site.sections_json));
+    if (sections.length === 0) sections = defaultSectionsForType(site.site_type || 'blog');
+    sections = sections.map(s =>
       s.slug === req.params.slug
         ? { ...s, defaultInstructionId: req.body.instructionId || null }
         : s
@@ -108,8 +110,18 @@ function dedupeSections(sections) {
   return [...seen.values()];
 }
 
+function defaultSectionsForType(siteType) {
+  const blog = { name: 'Posts', slug: 'posts', publishedDir: '_posts', draftDir: '_drafts', fileType: 'md', aiEnabled: true, frontmatterFields: [] };
+  const wiki = { name: 'Pages', slug: 'pages', publishedDir: '_pages', draftDir: '_pages', fileType: 'md', aiEnabled: true, frontmatterFields: [] };
+  if (siteType === 'wiki') return [wiki];
+  if (siteType === 'mixed') return [blog, wiki];
+  return [blog];
+}
+
 function parseSite(site) {
-  return { ...site, sections: dedupeSections(JSON.parse(site.sections_json)) };
+  let sections = dedupeSections(JSON.parse(site.sections_json));
+  if (sections.length === 0) sections = defaultSectionsForType(site.site_type || 'blog');
+  return { ...site, sections };
 }
 
 module.exports = router;

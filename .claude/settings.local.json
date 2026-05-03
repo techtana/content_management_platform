@@ -17,7 +17,8 @@
       "Bash(unset ELECTRON_RUN_AS_NODE)",
       "Bash(node_modules/.bin/electron.cmd electron-test3.js)",
       "Read(//tmp/**)",
-      "Bash(rm -f /tmp/etest3-err.txt electron-test3.js)"
+      "Bash(rm -f /tmp/etest3-err.txt electron-test3.js)",
+      "Bash(node app.js)"
     ]
   }
 }
