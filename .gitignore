@@ -7,7 +7,6 @@ node_modules/
 .idea/
 dist/
 build/
-dist-electron/
 ipynb_checkpoints/
 *.pyc
 *.pyo

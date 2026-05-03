@@ -5,7 +5,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const { initDb } = require('./config/db');
 
-dotenv.config({ path: process.env.CMS_CONFIG_PATH || path.join(__dirname, 'config', 'config.env') });
+dotenv.config({ path: './config/config.env' });
 
 initDb();
 
@@ -40,19 +40,6 @@ app.get('/{*path}', (req, res) => {
 const PORT = process.env.CMS_PORT || process.env.PORT || 3000;
 const BIND = process.env.CMS_BIND || '127.0.0.1';
 
-function startServer() {
-  return new Promise((resolve, reject) => {
-    const server = app.listen(PORT, BIND, () => {
-      const url = `http://${BIND}:${server.address().port}`;
-      console.log(`CMS running at ${url}`);
-      resolve(url);
-    });
-    server.on('error', reject);
-  });
-}
-
-if (require.main === module) {
-  startServer().catch(err => { console.error(err); process.exit(1); });
-}
-
-module.exports = { startServer };
+app.listen(PORT, BIND, () => {
+  console.log(`CMS running at http://${BIND}:${PORT}`);
+});
