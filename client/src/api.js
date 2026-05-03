@@ -33,6 +33,8 @@ export const reposApi = {
   list: () => api.get('/repos'),
   detect: (owner, repo) => api.get(`/repos/detect?owner=${owner}&repo=${repo}`),
   enhancePolicies: (owner, repo) => api.get(`/repos/enhance-policies?owner=${owner}&repo=${repo}`),
+  init: (owner, repo, branch, createSnapshot) => api.post('/repos/init', { owner, repo, branch, createSnapshot }),
+  create: (name, description) => api.post('/repos/create', { name, description }),
 };
 
 export const sitesApi = {
@@ -72,6 +74,20 @@ export const aiApi = {
   createInstruction: (body) => api.post('/ai/instructions', body),
   updateInstruction: (id, body) => api.put(`/ai/instructions/${id}`, body),
   deleteInstruction: (id) => api.delete(`/ai/instructions/${id}`),
+};
+
+function encPath(p) {
+  return btoa(p).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+export const postsApi = {
+  list: (siteId, status) => api.get(`/sites/${siteId}/posts?status=${status || 'draft'}`),
+  get: (siteId, filePath) => api.get(`/sites/${siteId}/posts/${encPath(filePath)}`),
+  create: (siteId, body) => api.post(`/sites/${siteId}/posts`, body),
+  update: (siteId, filePath, body) => api.put(`/sites/${siteId}/posts/${encPath(filePath)}`, body),
+  publish: (siteId, filePath, body) => api.post(`/sites/${siteId}/posts/${encPath(filePath)}/publish`, body),
+  archive: (siteId, filePath, body) => api.post(`/sites/${siteId}/posts/${encPath(filePath)}/archive`, body),
+  delete: (siteId, filePath, sha) => api.delete(`/sites/${siteId}/posts/${encPath(filePath)}`, { sha }),
 };
 
 export const notebookApi = {

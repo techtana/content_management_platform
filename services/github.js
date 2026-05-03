@@ -79,4 +79,46 @@ async function validateToken(token) {
   return { username: data.login, avatar: data.avatar_url };
 }
 
-module.exports = { createOctokit, getToken, getFile, listFiles, listFilesRecursive, upsertFile, deleteFile, listUserRepos, validateToken };
+async function createRepo(name, description, token) {
+  const octokit = createOctokit(token);
+  const { data } = await octokit.repos.createForAuthenticatedUser({
+    name,
+    description: description || '',
+    auto_init: true,
+    private: false,
+  });
+  return { owner: data.owner.login, name: data.name, default_branch: data.default_branch };
+}
+
+async function enablePages(owner, repo, branch, token) {
+  const octokit = createOctokit(token);
+  try {
+    await octokit.repos.createPagesSite({
+      owner, repo,
+      source: { branch: branch || 'main', path: '/' },
+    });
+  } catch (err) {
+    // 409 = already enabled — ignore
+    if (err.status !== 409) throw err;
+  }
+}
+
+async function createTag(owner, repo, tagName, message, branch, token) {
+  const octokit = createOctokit(token);
+  // Get latest commit SHA on branch
+  const { data: refData } = await octokit.git.getRef({ owner, repo, ref: `heads/${branch || 'main'}` });
+  const commitSha = refData.object.sha;
+  // Create annotated tag object
+  const { data: tagObj } = await octokit.git.createTag({
+    owner, repo,
+    tag: tagName,
+    message: message || `Snapshot before CMS initialization`,
+    object: commitSha,
+    type: 'commit',
+  });
+  // Create ref pointing to the tag
+  await octokit.git.createRef({ owner, repo, ref: `refs/tags/${tagName}`, sha: tagObj.sha });
+  return tagObj.sha;
+}
+
+module.exports = { createOctokit, getToken, getFile, listFiles, listFilesRecursive, upsertFile, deleteFile, listUserRepos, validateToken, createRepo, enablePages, createTag };

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { sitesApi, meApi } from '../api.js';
+import { DarkModeContext } from '../App.jsx';
 
-export default function Dashboard({ darkMode, onToggleDark }) {
+export default function Dashboard() {
   const [sites, setSites] = useState([]);
   const [me, setMe] = useState(null);
   const [activeSite, setActiveSite] = useState(null);
@@ -15,11 +16,6 @@ export default function Dashboard({ darkMode, onToggleDark }) {
     });
   }, []);
 
-  async function toggleDark() {
-    onToggleDark();
-    await meApi.patch({ darkMode: !darkMode });
-  }
-
   const sections = activeSite?.sections || [];
 
   return (
@@ -28,12 +24,7 @@ export default function Dashboard({ darkMode, onToggleDark }) {
       <div className="main-content">
         <header className="topbar">
           <span className="topbar-title">Dashboard</span>
-          <div className="topbar-actions">
-            <button className="toggle-btn" onClick={toggleDark} title="Toggle dark mode">
-              {darkMode ? '☀️' : '🌙'}
-            </button>
-            {me?.avatar && <img className="avatar" src={me.avatar} alt={me.username} title={`@${me.username}`} />}
-          </div>
+          {me?.avatar && <img className="avatar" src={me.avatar} alt={me.username} title={`@${me.username}`} />}
         </header>
 
         <main className="page">
@@ -48,6 +39,20 @@ export default function Dashboard({ darkMode, onToggleDark }) {
             </div>
           ) : (
             <>
+              {sites.length > 1 && (
+                <div className="tabs" style={{ marginBottom: '20px' }}>
+                  {sites.map(s => (
+                    <button
+                      key={s.id}
+                      className={`tab${activeSite?.id === s.id ? ' active' : ''}`}
+                      onClick={() => setActiveSite(s)}
+                    >
+                      {s.repo_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="page-header">
                 <div>
                   <h1 className="page-title">Welcome back{me ? `, @${me.username}` : ''}!</h1>
@@ -56,14 +61,14 @@ export default function Dashboard({ darkMode, onToggleDark }) {
               </div>
 
               <div className="section-grid">
-                {sections.map(s => (
-                  <Link key={s.slug} className="section-card" to={`/sites/${activeSite.id}/sections/${s.slug}`}>
-                    <div className="section-card-name">{s.name}</div>
-                    <div className="section-card-dir">{s.publishedDir}</div>
-                    <div className="flex gap-2 mt-2">
-                      {s.aiEnabled && <span className="badge badge-purple">AI</span>}
-                      {s.fileType === 'ipynb' && <span className="badge badge-yellow">Jupyter</span>}
-                    </div>
+                {[
+                  { status: 'draft', label: 'Drafts', icon: '📝', desc: 'Work in progress' },
+                  { status: 'published', label: 'Published', icon: '📄', desc: 'Live posts' },
+                  { status: 'archive', label: 'Archive', icon: '📦', desc: 'Archived posts' },
+                ].map(({ status, label, icon, desc }) => (
+                  <Link key={status} className="section-card" to={`/sites/${activeSite.id}/posts/${status}`}>
+                    <div className="section-card-name">{icon} {label}</div>
+                    <div className="section-card-dir">{desc}</div>
                   </Link>
                 ))}
               </div>
@@ -75,32 +80,92 @@ export default function Dashboard({ darkMode, onToggleDark }) {
   );
 }
 
-export function Sidebar({ site, activeSlug }) {
-  const sections = site?.sections || [];
+export function Sidebar({ site, activeSlug, activeStatus }) {
+  const { darkMode, onToggleDark } = useContext(DarkModeContext);
+  const [me, setMe] = useState(null);
+  const [allSites, setAllSites] = useState([]);
+
+  useEffect(() => {
+    meApi.get().then(setMe).catch(() => {});
+    sitesApi.list().then(setAllSites).catch(() => {});
+  }, []);
+
+  const multiSite = allSites.length > 1;
+
+  function siteNavItems(s, isActive) {
+    return (
+      <div className="sidebar-site-sections">
+        {[
+          { status: 'draft', label: 'Drafts', icon: '📝' },
+          { status: 'published', label: 'Published', icon: '📄' },
+          { status: 'archive', label: 'Archive', icon: '📦' },
+        ].map(({ status, label, icon }) => (
+          <Link
+            key={status}
+            className={`sidebar-link${isActive && activeStatus === status ? ' active' : ''}`}
+            to={`/sites/${s.id}/posts/${status}`}
+          >
+            <span style={{ marginRight: '6px', fontSize: '0.75rem' }}>{icon}</span>{label}
+          </Link>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">
+      <Link to="/dashboard" className="sidebar-logo">
         <div className="sidebar-logo-icon">📄</div>
         Pages CMS
-      </div>
+      </Link>
       <nav>
-        {site && (
-          <>
-            <div className="sidebar-section">{site.repo_owner}/{site.repo_name}</div>
-            {sections.map(s => (
-              <Link
-                key={s.slug}
-                className={`sidebar-link${s.slug === activeSlug ? ' active' : ''}`}
-                to={`/sites/${site.id}/sections/${s.slug}`}
-              >
-                {s.name}
-              </Link>
-            ))}
-          </>
+        {multiSite ? (
+          allSites.map(s => {
+            const isActive = s.id === site?.id;
+            return (
+              <div key={s.id}>
+                <div
+                  className={`sidebar-site-row${isActive ? ' active' : ''}`}
+                  onClick={() => {
+                    if (!isActive) {
+                      window.location.href = `/sites/${s.id}/posts/draft`;
+                    }
+                  }}
+                  title={isActive ? undefined : `Switch to ${s.repo_owner}/${s.repo_name}`}
+                >
+                  <span className="truncate">{s.repo_owner}/{s.repo_name}</span>
+                  <span className="sidebar-site-row-chevron">{isActive ? '▾' : '▸'}</span>
+                </div>
+                {isActive && siteNavItems(s, true)}
+              </div>
+            );
+          })
+        ) : (
+          site && (
+            <>
+              <div className="sidebar-section">{site.repo_owner}/{site.repo_name}</div>
+              {siteNavItems(site, true)}
+            </>
+          )
         )}
         <div className="sidebar-section">Settings</div>
         <Link className={`sidebar-link${activeSlug === '__ai' ? ' active' : ''}`} to="/ai-settings">AI Providers</Link>
+        <Link className={`sidebar-link${activeSlug === '__settings' ? ' active' : ''}`} to="/settings">Preferences</Link>
       </nav>
+      <div className="sidebar-footer">
+        {me && (
+          <div className="sidebar-user">
+            {me.avatar
+              ? <img className="avatar-sm" src={me.avatar} alt={me.username} />
+              : <div className="avatar-sm" style={{ background: 'var(--brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', color: 'var(--brand-text)', fontWeight: 700 }}>{me.username?.[0]?.toUpperCase()}</div>
+            }
+            <span className="sidebar-username">@{me.username}</span>
+          </div>
+        )}
+        <button className="toggle-btn" onClick={onToggleDark} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {darkMode ? '☀️' : '🌙'}
+        </button>
+      </div>
     </aside>
   );
 }

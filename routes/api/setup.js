@@ -68,18 +68,21 @@ router.post(
         ['github_avatar', avatar],
       ]);
 
-      const siteId = site.id || uuidv4();
-      db.prepare(`
-        INSERT OR REPLACE INTO sites (id, repo_owner, repo_name, default_branch, ssg_type, sections_json)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(
-        siteId,
-        site.repo_owner,
-        site.repo_name,
-        site.default_branch || 'main',
-        site.ssg_type || 'unknown',
-        JSON.stringify(dedupeSections(site.sections || []))
-      );
+      if (site.repo_owner !== '_pending_') {
+        const siteId = site.id || uuidv4();
+        const existing = db.prepare('SELECT id FROM sites WHERE repo_owner=? AND repo_name=?').get(site.repo_owner, site.repo_name);
+        db.prepare(`
+          INSERT OR REPLACE INTO sites (id, repo_owner, repo_name, default_branch, ssg_type, sections_json)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          existing?.id || siteId,
+          site.repo_owner,
+          site.repo_name,
+          site.default_branch || 'main',
+          site.ssg_type || 'unknown',
+          JSON.stringify(dedupeSections(site.sections || []))
+        );
+      }
 
       res.json({ ok: true, siteId, username, avatar });
     } catch (err) {

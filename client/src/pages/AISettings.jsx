@@ -133,7 +133,17 @@ export default function AISettings() {
     finally { setSdSaving(null); }
   }
 
-  const allSections = sites.flatMap(site => site.sections.map(s => ({ site, section: s })));
+  const seenRepoSlug = new Set();
+  const allSections = sites.flatMap(site =>
+    site.sections
+      .filter(s => {
+        const k = `${site.repo_owner}/${site.repo_name}::${s.slug}`;
+        if (seenRepoSlug.has(k)) return false;
+        seenRepoSlug.add(k);
+        return true;
+      })
+      .map(s => ({ site, section: s }))
+  );
 
   return (
     <div className="app-layout">

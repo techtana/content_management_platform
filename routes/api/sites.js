@@ -21,8 +21,12 @@ router.post(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const db = getDb();
-    const id = uuidv4();
     const { repo_owner, repo_name, default_branch, ssg_type, sections } = req.body;
+
+    const existing = db.prepare('SELECT * FROM sites WHERE repo_owner=? AND repo_name=?').get(repo_owner, repo_name);
+    if (existing) return res.status(200).json(parseSite(existing));
+
+    const id = uuidv4();
     db.prepare(`
       INSERT INTO sites (id, repo_owner, repo_name, default_branch, ssg_type, sections_json)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -59,17 +63,21 @@ router.put('/:id', (req, res) => {
 
 // PATCH /api/sites/:id/sections/:slug/default-instruction
 router.patch('/:id/sections/:slug/default-instruction', (req, res) => {
-  const db = getDb();
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
-  if (!site) return res.status(404).json({ error: 'Site not found' });
+  try {
+    const db = getDb();
+    const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const sections = JSON.parse(site.sections_json).map(s =>
-    s.slug === req.params.slug
-      ? { ...s, defaultInstructionId: req.body.instructionId || null }
-      : s
-  );
-  db.prepare('UPDATE sites SET sections_json=? WHERE id=?').run(JSON.stringify(sections), req.params.id);
-  res.json({ ok: true });
+    const sections = dedupeSections(JSON.parse(site.sections_json)).map(s =>
+      s.slug === req.params.slug
+        ? { ...s, defaultInstructionId: req.body.instructionId || null }
+        : s
+    );
+    db.prepare('UPDATE sites SET sections_json=? WHERE id=?').run(JSON.stringify(sections), req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.delete('/:id', (req, res) => {

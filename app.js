@@ -26,6 +26,7 @@ app.use('/api/me', require('./routes/api/me'));
 app.use('/api/repos', require('./routes/api/repos'));
 app.use('/api/sites', require('./routes/api/sites'));
 app.use('/api/sites', require('./routes/api/content'));
+app.use('/api/sites', require('./routes/api/posts'));
 app.use('/api/ai', require('./routes/api/ai'));
 app.use('/api/notebook', require('./routes/api/notebook'));
 

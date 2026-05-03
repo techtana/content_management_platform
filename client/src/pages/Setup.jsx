@@ -21,7 +21,6 @@ export default function Setup({ onComplete }) {
     try {
       const data = await setupApi.validateToken(token);
       setUser(data);
-      await setupApi.complete(token, { repo_owner: '_pending_', repo_name: '_pending_', sections: [] });
       const repoList = await reposApi.list();
       setRepos(repoList);
       setStep(1);
