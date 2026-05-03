@@ -7,8 +7,11 @@ import ContentList from './pages/ContentList.jsx';
 import Editor from './pages/Editor.jsx';
 import AISettings from './pages/AISettings.jsx';
 import Settings from './pages/Settings.jsx';
+import Help from './pages/Help.jsx';
 import PostsList from './pages/PostsList.jsx';
 import PostEditor from './pages/PostEditor.jsx';
+import WikiPagesList from './pages/WikiPagesList.jsx';
+import WikiPageEditor from './pages/WikiPageEditor.jsx';
 import './styles.css';
 
 export const DarkModeContext = createContext({ darkMode: false, onToggleDark: () => {} });
@@ -52,8 +55,12 @@ export default function App() {
                 <Route path="/sites/:siteId/posts/new" element={<PostEditor />} />
                 <Route path="/sites/:siteId/posts/edit/*" element={<PostEditor />} />
                 <Route path="/sites/:siteId/posts/:status" element={<PostsList />} />
+                <Route path="/sites/:siteId/pages" element={<WikiPagesList />} />
+                <Route path="/sites/:siteId/pages/new" element={<WikiPageEditor />} />
+                <Route path="/sites/:siteId/pages/edit/*" element={<WikiPageEditor />} />
                 <Route path="/ai-settings" element={<AISettings />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/help" element={<Help />} />
               </>
           }
         </Routes>

@@ -33,7 +33,8 @@ export const reposApi = {
   list: () => api.get('/repos'),
   detect: (owner, repo) => api.get(`/repos/detect?owner=${owner}&repo=${repo}`),
   enhancePolicies: (owner, repo) => api.get(`/repos/enhance-policies?owner=${owner}&repo=${repo}`),
-  init: (owner, repo, branch, createSnapshot) => api.post('/repos/init', { owner, repo, branch, createSnapshot }),
+  check: (owner, repo, branch) => api.get(`/repos/check?owner=${owner}&repo=${repo}${branch ? `&branch=${branch}` : ''}`),
+  init: (owner, repo, branch, opts) => api.post('/repos/init', { owner, repo, branch, ...opts }),
   create: (name, description) => api.post('/repos/create', { name, description }),
 };
 
@@ -42,6 +43,7 @@ export const sitesApi = {
   get: (id) => api.get(`/sites/${id}`),
   create: (body) => api.post('/sites', body),
   update: (id, body) => api.put(`/sites/${id}`, body),
+  patch: (id, body) => api.patch(`/sites/${id}`, body),
   delete: (id) => api.delete(`/sites/${id}`),
   setSectionInstruction: (siteId, slug, instructionId) =>
     api.patch(`/sites/${siteId}/sections/${slug}/default-instruction`, { instructionId }),
@@ -82,11 +84,14 @@ function encPath(p) {
 
 export const postsApi = {
   list: (siteId, status) => api.get(`/sites/${siteId}/posts?status=${status || 'draft'}`),
+  meta: (siteId, status) => api.get(`/sites/${siteId}/posts/meta?status=${status || 'draft'}`),
+  taxonomy: (siteId) => api.get(`/sites/${siteId}/posts/taxonomy`),
   get: (siteId, filePath) => api.get(`/sites/${siteId}/posts/${encPath(filePath)}`),
   create: (siteId, body) => api.post(`/sites/${siteId}/posts`, body),
   update: (siteId, filePath, body) => api.put(`/sites/${siteId}/posts/${encPath(filePath)}`, body),
   publish: (siteId, filePath, body) => api.post(`/sites/${siteId}/posts/${encPath(filePath)}/publish`, body),
   archive: (siteId, filePath, body) => api.post(`/sites/${siteId}/posts/${encPath(filePath)}/archive`, body),
+  unarchive: (siteId, filePath, body) => api.post(`/sites/${siteId}/posts/${encPath(filePath)}/unarchive`, body),
   delete: (siteId, filePath, sha) => api.delete(`/sites/${siteId}/posts/${encPath(filePath)}`, { sha }),
 };
 

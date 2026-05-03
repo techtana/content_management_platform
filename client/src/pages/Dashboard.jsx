@@ -61,16 +61,26 @@ export default function Dashboard() {
               </div>
 
               <div className="section-grid">
-                {[
-                  { status: 'draft', label: 'Drafts', icon: '📝', desc: 'Work in progress' },
-                  { status: 'published', label: 'Published', icon: '📄', desc: 'Live posts' },
-                  { status: 'archive', label: 'Archive', icon: '📦', desc: 'Archived posts' },
-                ].map(({ status, label, icon, desc }) => (
-                  <Link key={status} className="section-card" to={`/sites/${activeSite.id}/posts/${status}`}>
-                    <div className="section-card-name">{icon} {label}</div>
-                    <div className="section-card-dir">{desc}</div>
-                  </Link>
-                ))}
+                {(() => {
+                  const t = activeSite.site_type || 'blog';
+                  const hasBlog = t === 'blog' || t === 'mixed';
+                  const hasWiki = t === 'wiki' || t === 'mixed';
+                  return [
+                    ...(hasBlog ? [
+                      { key: 'draft',     label: 'Drafts',     icon: '📝', desc: 'Work in progress', to: `posts/draft` },
+                      { key: 'published', label: 'Published',  icon: '📄', desc: 'Live posts',        to: `posts/published` },
+                      { key: 'archive',   label: 'Archive',    icon: '📦', desc: 'Archived posts',   to: `posts/archive` },
+                    ] : []),
+                    ...(hasWiki ? [
+                      { key: 'pages',     label: 'Pages',      icon: '📚', desc: 'Wiki pages',        to: `pages` },
+                    ] : []),
+                  ].map(({ key, label, icon, desc, to }) => (
+                    <Link key={key} className="section-card" to={`/sites/${activeSite.id}/${to}`}>
+                      <div className="section-card-name">{icon} {label}</div>
+                      <div className="section-card-dir">{desc}</div>
+                    </Link>
+                  ));
+                })()}
               </div>
             </>
           )}
@@ -93,9 +103,12 @@ export function Sidebar({ site, activeSlug, activeStatus }) {
   const multiSite = allSites.length > 1;
 
   function siteNavItems(s, isActive) {
+    const t = s.site_type || 'blog';
+    const hasBlog = t === 'blog' || t === 'mixed';
+    const hasWiki = t === 'wiki' || t === 'mixed';
     return (
       <div className="sidebar-site-sections">
-        {[
+        {hasBlog && [
           { status: 'draft', label: 'Drafts', icon: '📝' },
           { status: 'published', label: 'Published', icon: '📄' },
           { status: 'archive', label: 'Archive', icon: '📦' },
@@ -108,6 +121,14 @@ export function Sidebar({ site, activeSlug, activeStatus }) {
             <span style={{ marginRight: '6px', fontSize: '0.75rem' }}>{icon}</span>{label}
           </Link>
         ))}
+        {hasWiki && (
+          <Link
+            className={`sidebar-link${isActive && activeStatus === 'page' ? ' active' : ''}`}
+            to={`/sites/${s.id}/pages`}
+          >
+            <span style={{ marginRight: '6px', fontSize: '0.75rem' }}>📚</span>Pages
+          </Link>
+        )}
       </div>
     );
   }
@@ -134,7 +155,17 @@ export function Sidebar({ site, activeSlug, activeStatus }) {
                   title={isActive ? undefined : `Switch to ${s.repo_owner}/${s.repo_name}`}
                 >
                   <span className="truncate">{s.repo_owner}/{s.repo_name}</span>
-                  <span className="sidebar-site-row-chevron">{isActive ? '▾' : '▸'}</span>
+                  <div className="flex gap-1 items-center" style={{ flexShrink: 0 }}>
+                    <a
+                      href={`https://github.com/${s.repo_owner}/${s.repo_name}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="sidebar-gh-link"
+                      title="Open on GitHub"
+                      onClick={e => e.stopPropagation()}
+                    >⎘</a>
+                    <span className="sidebar-site-row-chevron">{isActive ? '▾' : '▸'}</span>
+                  </div>
                 </div>
                 {isActive && siteNavItems(s, true)}
               </div>
@@ -143,7 +174,15 @@ export function Sidebar({ site, activeSlug, activeStatus }) {
         ) : (
           site && (
             <>
-              <div className="sidebar-section">{site.repo_owner}/{site.repo_name}</div>
+              <a
+                className="sidebar-section sidebar-section-link"
+                href={`https://github.com/${site.repo_owner}/${site.repo_name}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open on GitHub"
+              >
+                {site.repo_owner}/{site.repo_name}
+              </a>
               {siteNavItems(site, true)}
             </>
           )
@@ -151,6 +190,7 @@ export function Sidebar({ site, activeSlug, activeStatus }) {
         <div className="sidebar-section">Settings</div>
         <Link className={`sidebar-link${activeSlug === '__ai' ? ' active' : ''}`} to="/ai-settings">AI Providers</Link>
         <Link className={`sidebar-link${activeSlug === '__settings' ? ' active' : ''}`} to="/settings">Preferences</Link>
+        <Link className={`sidebar-link${activeSlug === '__help' ? ' active' : ''}`} to="/help">How it works</Link>
       </nav>
       <div className="sidebar-footer">
         {me && (

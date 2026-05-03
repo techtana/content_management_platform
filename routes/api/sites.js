@@ -21,16 +21,16 @@ router.post(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const db = getDb();
-    const { repo_owner, repo_name, default_branch, ssg_type, sections } = req.body;
+    const { repo_owner, repo_name, default_branch, ssg_type, site_type, sections } = req.body;
 
     const existing = db.prepare('SELECT * FROM sites WHERE repo_owner=? AND repo_name=?').get(repo_owner, repo_name);
     if (existing) return res.status(200).json(parseSite(existing));
 
     const id = uuidv4();
     db.prepare(`
-      INSERT INTO sites (id, repo_owner, repo_name, default_branch, ssg_type, sections_json)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, repo_owner, repo_name, default_branch || 'main', ssg_type || 'unknown', JSON.stringify(dedupeSections(sections || [])));
+      INSERT INTO sites (id, repo_owner, repo_name, default_branch, ssg_type, site_type, sections_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, repo_owner, repo_name, default_branch || 'main', ssg_type || 'unknown', site_type || 'blog', JSON.stringify(dedupeSections(sections || [])));
     res.status(201).json(parseSite(db.prepare('SELECT * FROM sites WHERE id = ?').get(id)));
   }
 );
@@ -47,18 +47,33 @@ router.put('/:id', (req, res) => {
   const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
-  const { repo_owner, repo_name, default_branch, ssg_type, sections } = req.body;
+  const { repo_owner, repo_name, default_branch, ssg_type, site_type, sections } = req.body;
   db.prepare(`
-    UPDATE sites SET repo_owner=?, repo_name=?, default_branch=?, ssg_type=?, sections_json=? WHERE id=?
+    UPDATE sites SET repo_owner=?, repo_name=?, default_branch=?, ssg_type=?, site_type=?, sections_json=? WHERE id=?
   `).run(
     repo_owner || site.repo_owner,
     repo_name || site.repo_name,
     default_branch || site.default_branch,
     ssg_type || site.ssg_type,
+    site_type || site.site_type || 'blog',
     JSON.stringify(dedupeSections(sections || JSON.parse(site.sections_json))),
     req.params.id
   );
   res.json(parseSite(db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id)));
+});
+
+// PATCH /api/sites/:id — partial update (e.g. site_type only)
+router.patch('/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    const { site_type } = req.body;
+    if (site_type) db.prepare('UPDATE sites SET site_type=? WHERE id=?').run(site_type, req.params.id);
+    res.json(parseSite(db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id)));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // PATCH /api/sites/:id/sections/:slug/default-instruction

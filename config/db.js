@@ -20,6 +20,12 @@ function initDb() {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
 
+  // Migrations for existing installs
+  const siteCols = db.prepare('PRAGMA table_info(sites)').all().map(c => c.name);
+  if (!siteCols.includes('site_type')) {
+    db.prepare("ALTER TABLE sites ADD COLUMN site_type TEXT NOT NULL DEFAULT 'blog'").run();
+  }
+
   console.log(`SQLite database at ${dbPath}`);
   return db;
 }

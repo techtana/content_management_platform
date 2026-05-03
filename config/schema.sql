@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS sites (
   repo_name      TEXT NOT NULL,
   default_branch TEXT NOT NULL DEFAULT 'main',
   ssg_type       TEXT NOT NULL DEFAULT 'unknown',
+  site_type      TEXT NOT NULL DEFAULT 'blog',
   sections_json  TEXT NOT NULL,
   created_at     TEXT DEFAULT (datetime('now'))
 );

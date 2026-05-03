@@ -4,7 +4,6 @@ import { sitesApi, postsApi, aiApi } from '../api.js';
 import { Sidebar } from './Dashboard.jsx';
 import EnhanceDiff from '../components/EnhanceDiff.jsx';
 
-// ── Tag / category multi-input ─────────────────────────────────────────────
 function TagInput({ values, onChange, options, placeholder }) {
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(false);
@@ -68,7 +67,6 @@ function TagInput({ values, onChange, options, placeholder }) {
   );
 }
 
-// ── Utilities ──────────────────────────────────────────────────────────────
 function wordCount(text) {
   return (text || '').trim().split(/\s+/).filter(Boolean).length;
 }
@@ -82,12 +80,7 @@ function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-function isImageUrl(url) {
-  return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(url);
-}
-
-// ── Main component ─────────────────────────────────────────────────────────
-export default function PostEditor() {
+export default function WikiPageEditor() {
   const { siteId, '*': encodedPath } = useParams();
   const navigate = useNavigate();
   const isNew = !encodedPath;
@@ -99,7 +92,6 @@ export default function PostEditor() {
   const [body, setBody] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -107,9 +99,8 @@ export default function PostEditor() {
 
   const [taxonomy, setTaxonomy] = useState({ categories: [], tags: [] });
 
-  const original = useRef({ frontmatter: {}, body: '', slug: '', date: '' });
+  const original = useRef({ frontmatter: {}, body: '', slug: '' });
 
-  // AI
   const [aiProviders, setAiProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState('');
   const [instructions, setInstructions] = useState([]);
@@ -117,10 +108,6 @@ export default function PostEditor() {
   const [adHocInstruction, setAdHocInstruction] = useState('');
   const [enhancing, setEnhancing] = useState(false);
   const [diffResult, setDiffResult] = useState(null);
-
-  const currentStatus = filePath.startsWith('_posts/') ? 'published'
-    : filePath.startsWith('_archive/') ? 'archive'
-    : 'draft';
 
   const fm = frontmatter;
   function setFm(key, val) {
@@ -143,17 +130,14 @@ export default function PostEditor() {
     setFilePath(rawPath);
     postsApi.get(siteId, rawPath).then(data => {
       const rawFm = data.frontmatter || {};
-      // Normalize categories: read categories[] or legacy category string
       const catRaw = rawFm.categories || rawFm.category;
       const categories = Array.isArray(catRaw) ? catRaw : catRaw ? [catRaw] : [];
       const { category: _cat, ...restFm } = rawFm;
       const fmData = { ...restFm, ...(categories.length ? { categories } : {}) };
       const bd = data.body || '';
-      const dt = data.date || rawFm.date || new Date().toISOString().slice(0, 10);
-      const m = rawPath.split('/').pop().match(/^\d{4}-\d{2}-\d{2}-(.+)\.\w+$/);
-      const sl = m ? m[1] : '';
-      setFrontmatter(fmData); setBody(bd); setSha(data.sha); setDate(dt); setSlug(sl);
-      original.current = { frontmatter: fmData, body: bd, date: dt, slug: sl };
+      const sl = rawPath.split('/').pop().replace(/\.md$/, '');
+      setFrontmatter(fmData); setBody(bd); setSha(data.sha); setSlug(sl);
+      original.current = { frontmatter: fmData, body: bd, slug: sl };
     }).catch(e => setError(e.message)).finally(() => setLoading(false));
   }, [isNew, encodedPath, siteId]);
 
@@ -164,74 +148,30 @@ export default function PostEditor() {
   function handleRevert() {
     if (!confirm('Revert all changes to the last saved version?')) return;
     const o = original.current;
-    setFrontmatter(o.frontmatter); setBody(o.body); setDate(o.date); setSlug(o.slug);
+    setFrontmatter(o.frontmatter); setBody(o.body); setSlug(o.slug);
     setDiffResult(null);
     setSuccess('Reverted to last saved version.');
   }
 
   function buildFilename() {
-    const s = slug || slugify(fm.title || 'untitled');
-    return `${date}-${s}.md`;
+    return `${slug || slugify(fm.title || 'untitled')}.md`;
   }
 
-  async function saveDraft() {
+  async function savePage() {
     setError(''); setSuccess(''); setSaving(true);
     try {
-      const payload = { frontmatter: { ...fm, date }, body, filename: buildFilename() };
+      const payload = { frontmatter: fm, body, filename: buildFilename(), status: 'page' };
       if (isNew) {
         await postsApi.create(siteId, payload);
-        setSuccess('Draft saved!');
-        setTimeout(() => navigate(`/sites/${siteId}/posts/draft`), 1200);
+        setSuccess('Page saved!');
+        setTimeout(() => navigate(`/sites/${siteId}/pages`), 1200);
       } else {
-        const { sha: newSha } = await postsApi.update(siteId, filePath, { frontmatter: { ...fm, date }, body, sha });
-        setSha(newSha); original.current = { frontmatter: fm, body, date, slug }; setSuccess('Draft saved!');
+        const { sha: newSha } = await postsApi.update(siteId, filePath, { frontmatter: fm, body, sha });
+        setSha(newSha); original.current = { frontmatter: fm, body, slug }; setSuccess('Page saved!');
       }
     } catch (e) {
       setError(e.status === 409 ? 'File changed remotely — go back and reload.' : e.message);
     } finally { setSaving(false); }
-  }
-
-  async function publish() {
-    setError(''); setSuccess(''); setSaving(true);
-    try {
-      const fmWithDate = { ...fm, date };
-      if (isNew) {
-        const { path: draftPath, sha: draftSha } = await postsApi.create(siteId, { frontmatter: fmWithDate, body, filename: buildFilename() });
-        await postsApi.publish(siteId, draftPath, { frontmatter: fmWithDate, body, sha: draftSha });
-        setSuccess('Published!');
-        setTimeout(() => navigate(`/sites/${siteId}/posts/published`), 1200);
-      } else {
-        const { sha: newSha, path: newPath } = await postsApi.publish(siteId, filePath, { frontmatter: fmWithDate, body, sha });
-        setSha(newSha); setFilePath(newPath);
-        original.current = { frontmatter: fm, body, date, slug };
-        setSuccess('Published!');
-        setTimeout(() => navigate(`/sites/${siteId}/posts/published`), 1200);
-      }
-    } catch (e) {
-      setError(e.status === 409 ? 'File changed remotely — go back and reload.' : e.message);
-    } finally { setSaving(false); }
-  }
-
-  async function archive() {
-    if (!sha || !confirm('Archive this post?')) return;
-    setError(''); setSaving(true);
-    try {
-      await postsApi.archive(siteId, filePath, { sha });
-      setSuccess('Archived!');
-      setTimeout(() => navigate(`/sites/${siteId}/posts/archive`), 1200);
-    } catch (e) { setError(e.message); }
-    finally { setSaving(false); }
-  }
-
-  async function unarchive() {
-    if (!sha || !confirm('Reopen this post as a draft?')) return;
-    setError(''); setSaving(true);
-    try {
-      await postsApi.unarchive(siteId, filePath, { sha });
-      setSuccess('Reopened as draft!');
-      setTimeout(() => navigate(`/sites/${siteId}/posts/draft`), 1200);
-    } catch (e) { setError(e.message); }
-    finally { setSaving(false); }
   }
 
   async function handleEnhance() {
@@ -247,49 +187,32 @@ export default function PostEditor() {
     finally { setEnhancing(false); }
   }
 
-  if (loading) return <div className="loading">Loading post…</div>;
+  if (loading) return <div className="loading">Loading page…</div>;
 
   const hasAi = aiProviders.length > 0;
   const isDirty = !isNew && (body !== original.current.body || JSON.stringify(fm) !== JSON.stringify(original.current.frontmatter));
-  const backPath = isNew ? `/sites/${siteId}/posts/draft` : `/sites/${siteId}/posts/${currentStatus}`;
-  const words = wordCount(body);
   const categories = Array.isArray(fm.categories) ? fm.categories : [];
   const tags = Array.isArray(fm.tags) ? fm.tags : (fm.tags ? [fm.tags] : []);
-  const banner = fm.banner || '';
+  const words = wordCount(body);
   const ghBase = site ? `https://github.com/${site.repo_owner}/${site.repo_name}/blob/${site.default_branch}` : '';
 
   return (
     <div className="app-layout">
-      <Sidebar site={site} activeStatus={currentStatus} />
+      <Sidebar site={site} activeStatus="page" />
       <div className="main-content">
         <header className="topbar">
           <span className="topbar-title">
-            {isNew ? 'New Post' : (fm.title || 'Edit Post')}
+            {isNew ? 'New Page' : (fm.title || 'Edit Page')}
             {isDirty && <span className="topbar-unsaved">• unsaved</span>}
           </span>
           <div className="topbar-actions">
             {!isNew && isDirty && (
               <button className="btn btn-ghost btn-sm" onClick={handleRevert}>↩ Revert</button>
             )}
-            {currentStatus === 'archive' ? (
-              <button className="btn btn-secondary btn-sm" onClick={unarchive} disabled={saving}>↩ Reopen as draft</button>
-            ) : (
-              !isNew && <button className="btn btn-ghost btn-sm" onClick={archive} disabled={saving}>📦 Archive</button>
-            )}
-            <Link className="btn btn-ghost btn-sm" to={backPath}>Cancel</Link>
-            {currentStatus !== 'archive' && (
-              <>
-                {(isNew || currentStatus === 'draft') && (
-                  <button className="btn btn-secondary" onClick={saveDraft} disabled={saving}>Save Draft</button>
-                )}
-                <button className="btn btn-primary" onClick={publish} disabled={saving}>
-                  {saving ? 'Saving…' : currentStatus === 'published' ? 'Update' : 'Publish'}
-                </button>
-                {currentStatus === 'published' && (
-                  <button className="btn btn-secondary" onClick={saveDraft} disabled={saving}>Save</button>
-                )}
-              </>
-            )}
+            <Link className="btn btn-ghost btn-sm" to={`/sites/${siteId}/pages`}>Cancel</Link>
+            <button className="btn btn-primary" onClick={savePage} disabled={saving}>
+              {saving ? 'Saving…' : isNew ? 'Create Page' : 'Save Page'}
+            </button>
           </div>
         </header>
 
@@ -307,7 +230,7 @@ export default function PostEditor() {
                     className="form-input"
                     value={fm.title || ''}
                     onChange={e => setFm('title', e.target.value)}
-                    placeholder="Post title…"
+                    placeholder="Page title…"
                   />
                 </div>
                 <div className="form-group">
@@ -316,23 +239,8 @@ export default function PostEditor() {
                     className="form-input"
                     value={fm.subtitle || ''}
                     onChange={e => setFm('subtitle', e.target.value)}
-                    placeholder="A brief subtitle…"
+                    placeholder="A brief description…"
                   />
-                </div>
-                <div className="form-grid-2">
-                  <div className="form-group">
-                    <label className="form-label">Date</label>
-                    <input className="form-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Author <span className="form-label-opt">(optional)</span></label>
-                    <input
-                      className="form-input"
-                      value={fm.author || ''}
-                      onChange={e => setFm('author', e.target.value)}
-                      placeholder="e.g. Jane Doe"
-                    />
-                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Slug</label>
@@ -344,15 +252,6 @@ export default function PostEditor() {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Categories</label>
-                  <TagInput
-                    values={categories}
-                    onChange={v => setFm('categories', v)}
-                    options={taxonomy.categories}
-                    placeholder="Add categories…"
-                  />
-                </div>
-                <div className="form-group">
                   <label className="form-label">Tags</label>
                   <TagInput
                     values={tags}
@@ -361,21 +260,7 @@ export default function PostEditor() {
                     placeholder="Add tags…"
                   />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Banner <span className="form-label-opt">(image or video URL)</span></label>
-                  <input
-                    className="form-input"
-                    value={banner}
-                    onChange={e => setFm('banner', e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                  />
-                  {banner && isImageUrl(banner) && (
-                    <div className="banner-preview">
-                      <img src={banner} alt="banner preview" onError={e => { e.target.style.display = 'none'; }} />
-                    </div>
-                  )}
-                </div>
-                <div className="form-help">Filename: <span className="font-mono">{buildFilename()}</span></div>
+                <div className="form-help">Filename: <span className="font-mono">_pages/{buildFilename()}</span></div>
               </div>
 
               <div className="card">
@@ -384,21 +269,20 @@ export default function PostEditor() {
                   className="form-textarea editor-body"
                   value={body}
                   onChange={e => setBody(e.target.value)}
-                  placeholder="Write your post content in Markdown…"
+                  placeholder="Write your page content in Markdown…"
                 />
               </div>
             </div>
 
             {/* ── Right column ── */}
             <div className="flex-col gap-3">
-              {/* About — always first */}
               <div className="card">
                 <div className="card-title mb-3">About</div>
                 <div className="about-row">
                   <span className="about-label">File</span>
                   <span className="about-value" style={{ wordBreak: 'break-all' }}>
                     {isNew ? (
-                      <span className="font-mono" style={{ color: 'var(--text-3)', fontSize: '0.75rem' }}>_drafts/{buildFilename()}</span>
+                      <span className="font-mono" style={{ color: 'var(--text-3)', fontSize: '0.75rem' }}>_pages/{buildFilename()}</span>
                     ) : ghBase ? (
                       <a
                         href={`${ghBase}/${filePath}`}
@@ -416,12 +300,6 @@ export default function PostEditor() {
                   </span>
                 </div>
                 <div className="about-row">
-                  <span className="about-label">Status</span>
-                  <span className={`badge ${currentStatus === 'published' ? 'badge-green' : currentStatus === 'archive' ? 'badge-purple' : 'badge-yellow'}`}>
-                    {currentStatus}
-                  </span>
-                </div>
-                <div className="about-row">
                   <span className="about-label">Words</span>
                   <span className="about-value">{words.toLocaleString()}</span>
                 </div>
@@ -431,7 +309,6 @@ export default function PostEditor() {
                 </div>
               </div>
 
-              {/* AI Enhancement */}
               {hasAi && (
                 <div className="card">
                   <div className="ai-panel-title">✨ AI Enhancement</div>
@@ -455,7 +332,7 @@ export default function PostEditor() {
                       rows={3}
                       value={adHocInstruction}
                       onChange={e => setAdHocInstruction(e.target.value)}
-                      placeholder="e.g. Make the intro more punchy…"
+                      placeholder="e.g. Make this clearer for beginners…"
                     />
                   </div>
                   <button className="btn btn-secondary w-full" onClick={handleEnhance} disabled={enhancing || !body}>

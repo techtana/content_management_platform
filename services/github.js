@@ -55,7 +55,8 @@ async function upsertFile(owner, repo, filePath, content, message, sha, branch, 
   };
   if (sha) params.sha = sha;
   const { data } = await octokit.repos.createOrUpdateFileContents(params);
-  return data.commit.sha;
+  // Return blob sha (not commit sha) so callers can use it for subsequent updates
+  return data.content.sha;
 }
 
 async function deleteFile(owner, repo, filePath, message, sha, branch, token) {
